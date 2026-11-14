@@ -12,13 +12,18 @@ on its own, and that creating an account makes the caller its owner.
 from __future__ import annotations
 
 import asyncio
+import base64
+import os
 import re
 import threading
 import time
 import uuid
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.testclient import TestClient
@@ -78,6 +83,46 @@ def _hold_stream(app_client: TestClient, token: str, opened: threading.Event) ->
         return "".join(received)
 
     return app_client.portal.start_task_soon(hold)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _encryption_key() -> Iterator[None]:
+    """An encryption key for this module's app, which a phone's push
+    registration needs (its relay ticket is stored encrypted)."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("ENCRYPTION_KEY", "0" * 64)
+        yield
+
+
+def _browser_push(endpoint: str) -> dict[str, Any]:
+    """A Web Push registration body with real browser keys."""
+    public = ec.generate_private_key(ec.SECP256R1()).public_key().public_bytes(
+        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint,
+    )
+    encode = lambda raw: base64.urlsafe_b64encode(raw).rstrip(b"=").decode()  # noqa: E731
+    keys = {"p256dh": encode(public), "auth": encode(os.urandom(16))}
+    return {"endpoint": endpoint, "keys": keys}
+
+
+def _phone_push() -> dict[str, Any]:
+    """A native (phone) push registration body for a relay this server allows."""
+    return {
+        "installation_id": str(uuid.uuid4()), "relay_url": "https://push.frederikberg.net",
+        "ticket": "sealed-ticket", "content_key": base64.b64encode(os.urandom(32)).decode(),
+    }
+
+
+def _devices(app_client: TestClient, user_id: str) -> set[str]:
+    """The ids of a user's registered push devices, read from the database."""
+    return app_client.portal.call(_device_ids, user_id)
+
+
+async def _device_ids(user_id: str) -> set[str]:
+    async with get_db_connection().session() as session:
+        result = await session.execute(
+            text("SELECT id FROM push_subscriptions WHERE user_id = :u"), {"u": user_id},
+        )
+        return {str(row[0]) for row in result}
 
 
 def _phone_token(
@@ -426,6 +471,65 @@ class TestSignIns:
         assert signed_out.json() == {"revoked": 3}
         assert refused == {"phone": 401, "browser": 401, "machine": 401}
         assert back.status_code == 200
+
+    def test_revoking_a_phone_deletes_the_push_devices_it_registered(
+        self, app_client: TestClient, auth_issuer: TestIssuer,
+    ) -> None:
+        subject = f"push-phone-{uuid.uuid4()}"
+        lost = _phone_token(auth_issuer, subject, "V2_601")
+        kept = _phone_token(auth_issuer, subject, "V2_602")
+        native = app_client.post(
+            "/api/alerts/subscriptions/native", headers=bearer(lost), json=_phone_push(),
+        )
+        browser = app_client.post(
+            "/api/alerts/subscriptions", headers=bearer(lost),
+            json=_browser_push(f"https://push.example/{uuid.uuid4()}"),
+        )
+        other = app_client.post(
+            "/api/alerts/subscriptions/native", headers=bearer(kept), json=_phone_push(),
+        )
+        assert (native.status_code, browser.status_code, other.status_code) == (201, 201, 201), (
+            native.text, browser.text, other.text,
+        )
+        user_id = app_client.get("/api/me", headers=bearer(kept)).json()["user_id"]
+        lost_sign_in = next(
+            row["id"] for row in app_client.get("/api/me/sign-ins", headers=bearer(kept)).json()
+            if not row["current"]
+        )
+
+        revoked = app_client.post(f"/api/admin/sign-ins/{lost_sign_in}/revoke")
+
+        assert revoked.status_code == 200
+        assert _devices(app_client, user_id) == {other.json()["id"]}
+
+    def test_a_phone_signs_itself_out_with_its_push_device(
+        self, app_client: TestClient, auth_issuer: TestIssuer,
+    ) -> None:
+        phone = _phone_token(auth_issuer, f"leaving-phone-{uuid.uuid4()}", "V2_701")
+        user_id = app_client.get("/api/me", headers=bearer(phone)).json()["user_id"]
+        device = app_client.post(
+            "/api/alerts/subscriptions/native", headers=bearer(phone), json=_phone_push(),
+        )
+        assert device.status_code == 201, device.text
+
+        signed_out = app_client.post("/api/me/sign-ins/current/revoke", headers=bearer(phone))
+        after = app_client.get("/api/me", headers=bearer(phone))
+
+        assert signed_out.status_code == 200
+        assert signed_out.json()["revoked_at"] is not None
+        assert _devices(app_client, user_id) == set()
+        assert after.status_code == 401
+
+    def test_a_machine_client_cannot_sign_itself_out(
+        self, app_client: TestClient, auth_issuer: TestIssuer,
+    ) -> None:
+        key = auth_issuer.mint(f"self-revoking-key-{uuid.uuid4()}")
+        app_client.get("/api/me", headers=bearer(key))
+
+        refused = app_client.post("/api/me/sign-ins/current/revoke", headers=bearer(key))
+
+        assert refused.status_code == 400
+        assert app_client.get("/api/me", headers=bearer(key)).status_code == 200
 
     def test_revoking_a_sign_in_ends_its_open_event_stream(
         self, app_client: TestClient, auth_issuer: TestIssuer,

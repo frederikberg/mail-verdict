@@ -97,6 +97,9 @@ _UNANNOUNCED: dict[str, str] = {
         "The same, for a subject removed; the streams of the sign-ins it revokes end at once "
         "(api/events.py), and their clients' next request is refused."
     ),
+    "POST /me/sign-ins/current/revoke": (
+        "The same as revoking one's own sign-in from the list."
+    ),
     "POST /me/sign-ins/{sign_in_id}/revoke": (
         "A revoked sign-in's own stream ends at once and its client's next request is refused; "
         "another open list of sign-ins shows it revoked when it is next opened."

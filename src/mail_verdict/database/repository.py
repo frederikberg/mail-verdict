@@ -2265,6 +2265,7 @@ class PushSubscriptionRepository:
         p256dh: str,
         auth: str,
         label: str | None,
+        sign_in_id: uuid.UUID | None = None,
     ) -> PushSubscription:
         """
         Register a subscription, or refresh one already registered at
@@ -2272,7 +2273,8 @@ class PushSubscriptionRepository:
         storage, or PushManager rotating the endpoint under an
         unchanged registration, both look like this rather than a
         second device appearing. A browser someone else signs in on
-        becomes theirs.
+        becomes theirs. `sign_in_id` is the sign-in registering it
+        (auth/sign_ins.py), recorded on every refresh.
 
         Returns:
             The subscription row, existing or newly inserted
@@ -2282,7 +2284,7 @@ class PushSubscriptionRepository:
                 pg_insert(PushSubscription)
                 .values(
                     endpoint=endpoint, p256dh=p256dh, auth=auth, label=label,
-                    last_seen_at=func.now(), user_id=user_id,
+                    last_seen_at=func.now(), user_id=user_id, sign_in_id=sign_in_id,
                 )
                 .on_conflict_do_update(
                     index_elements=["endpoint"],
@@ -2292,6 +2294,7 @@ class PushSubscriptionRepository:
                         "failed_at": None,
                         "last_seen_at": func.now(),
                         "user_id": user_id,
+                        "sign_in_id": sign_in_id,
                     },
                 )
                 .returning(PushSubscription)
@@ -2309,12 +2312,14 @@ class PushSubscriptionRepository:
         encrypted_content_key: bytes,
         label: str | None,
         muted_channels: list[str] | None,
+        sign_in_id: uuid.UUID | None = None,
     ) -> PushSubscription:
         """
         Register a native device, or refresh the one already registered
         under this installation id -- the app re-registers whenever its
         device token or relay ticket changes, and at least daily. A phone
-        someone else signs in on becomes theirs.
+        someone else signs in on becomes theirs. `sign_in_id` is the sign-in
+        registering it (auth/sign_ins.py), recorded on every refresh.
 
         The relay address, ticket and key always take the new values. A
         label or muted_channels of None leaves a registered device's own
@@ -2331,6 +2336,7 @@ class PushSubscriptionRepository:
             "failed_at": None,
             "last_seen_at": func.now(),
             "user_id": user_id,
+            "sign_in_id": sign_in_id,
         }
         if label is not None:
             refreshed["label"] = label
@@ -2344,7 +2350,7 @@ class PushSubscriptionRepository:
                     encrypted_relay_ticket=encrypted_relay_ticket,
                     encrypted_content_key=encrypted_content_key, label=label,
                     muted_channels=muted_channels or [], last_seen_at=func.now(),
-                    user_id=user_id,
+                    user_id=user_id, sign_in_id=sign_in_id,
                 )
                 .on_conflict_do_update(
                     index_elements=["installation_id"],

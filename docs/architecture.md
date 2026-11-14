@@ -1263,7 +1263,12 @@ authenticated user may still be used. Past the token check, the gate matches eve
   provider session every time, so nothing narrower stays the same. A revoked one stays refused
   however many tokens it mints.
 
-A revoked row stays, so the same handle is refused when it comes back. The identity provider is
+A revoked row stays, so the same handle is refused when it comes back. Revoking it also deletes
+the push subscriptions registered under it: a subscription records the sign-in that registered or
+last refreshed it (`push_subscriptions.sign_in_id`), so a lost phone signed out remotely stops
+receiving notifications even though its push service would still deliver them. A phone app signing
+itself out calls `POST /api/me/sign-ins/current/revoke` while it still holds its token; a machine
+client cannot sign itself out that way. The identity provider is
 not told: Zitadel offers no per-session revocation to anyone but the token's holder, so a revoked
 phone's refresh token keeps working there and every token it yields is refused here. The result
 is remembered for `auth.principal_cache_seconds`, which also paces how often `last_seen_at` is

@@ -169,6 +169,9 @@ push:
   read_sync_min_interval_seconds: 600
   # How long one request to a relay may take before it counts as failed.
   relay_timeout_seconds: 10
+  # How long one Web Push send to a browser's push service may take, from
+  # connecting to the answer, before it counts as failed.
+  webpush_timeout_seconds: 10
 
 # Rule-triggered webhooks (webhooks/worker.py): a rule's "webhook" action
 # queues one delivery per mail, and one worker sends them in order.
@@ -203,6 +206,11 @@ extraction:
   # Wall-clock budget for one document, covering a slow scan and a hung
   # child alike. Past it the child is killed and the document counts as failed.
   timeout_seconds: 90
+  # How long a new extraction child may take to start (a spawned interpreter
+  # importing the readers) before its first document. Not part of
+  # timeout_seconds, so a document is never failed for the start-up of the
+  # child that reads it.
+  child_start_timeout_seconds: 60
   # Pages of one PDF read at all (text layer or OCR).
   max_pdf_pages: 60
   # Leading pages scanned for barcodes. A ticket's code sits on its first

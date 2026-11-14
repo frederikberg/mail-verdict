@@ -94,6 +94,13 @@ async def _insert_account(conn, name_prefix: str) -> tuple[uuid.UUID, str]:
         ),
         {"id": account_id, "name": email, "email": email},
     )
+    await conn.execute(
+        text(
+            "INSERT INTO account_owners (account_id, user_id) "
+            "VALUES (:id, '00000000-0000-0000-0000-000000000001') ON CONFLICT DO NOTHING"
+        ),
+        {"id": account_id},
+    )
     return account_id, email
 
 

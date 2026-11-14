@@ -60,6 +60,9 @@ ROUTE_CASES: list[RouteCase] = [
         params=lambda world: {"user_id": str(uuid.uuid4())}, owner_also=(404,),
     ),
     RouteCase("GET /api/me/sign-ins", "own"),
+    # A's World token is a machine client's, which this route refuses rather
+    # than signing out; a phone signing itself out is tests/e2e/test_auth_gate.py.
+    RouteCase("POST /api/me/sign-ins/current/revoke", "own", also=(400,)),
     RouteCase(
         "POST /api/me/sign-ins/{sign_in_id}/revoke", "resource_id",
         params=lambda world: {"sign_in_id": world.b["sign_in_id"]},
