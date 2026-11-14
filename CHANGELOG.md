@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The README, features and architecture notes describe the Android app and both of its
+  notification paths: Firebase Cloud Messaging through the push relay on phones with Google Play
+  services, and Web Push to a UnifiedPush helper app on phones without.
+
 ## [9.0.1] - 2026-11-14
 
 ### Fixed

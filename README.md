@@ -219,18 +219,27 @@ themselves.
 The web UI works at phone width and can be installed to the home screen, where it also gets push
 notifications.
 
-[mail-verdict-ios](https://github.com/frederikberg/mail-verdict-ios) is a native iPhone client for
-the same server. It talks to the same API as the browser, signing in with the same identity provider and sending
-its access token as a bearer token.
+[mail-verdict-ios](https://github.com/frederikberg/mail-verdict-ios) and
+[mail-verdict-android](https://github.com/frederikberg/mail-verdict-android) are native clients for
+the same server. They talk to the same API as the browser, signing in with the same identity
+provider and sending their access token as a bearer token. Each sign-in is listed under the name
+the phone gives itself, and can be revoked on its own ([Access](#access)).
 
-Its notifications go through a push relay run by the app's publisher, because only the publisher
-can sign pushes for the app. Each notification is sealed on this server with a key only the phone
-holds, so the relay forwards ciphertext:
+An iPhone, and an Android phone with Google Play services, receive notifications through a push
+relay run by the apps' publisher, because only the publisher can sign pushes for the apps (Apple
+Push Notification service on the iPhone, Firebase Cloud Messaging on Android). Each notification is
+sealed on this server with a key only the phone holds, so the relay forwards ciphertext:
 
 - **The relay sees** the phone's device token, this server's IP address, and the size and timing
   of each push.
 - **The relay never sees** a subject, a sender, an account, a message or a badge count, and it
   stores nothing.
+
+An Android phone without Google Play services uses a UnifiedPush helper app such as ntfy instead.
+The app registers the helper's Web Push endpoint like a browser does, and this server sends
+standard encrypted Web Push to it, that is to the helper's push server (ntfy.sh, or one the user
+runs); the relay is not involved. Without a helper app the
+phone gets no notifications and catches up whenever the app is open.
 
 Native push needs `ENCRYPTION_KEY`. The relays a phone may use are listed in
 `push.relay_urls` in [`config/config.yaml`](config/config.yaml), and every push names the app

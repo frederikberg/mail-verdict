@@ -806,8 +806,9 @@ calendar-reminder alert would need on top of this — for a kind that nothing ye
 path inserts one. Building that delivery path is future work, not a column left over from one.
 
 Reaching a device with no page open at all is Web Push, layered on top of the mail alert path
-rather than replacing it: `push_subscriptions` (one row per browser, carrying that browser's own
-per-device preferences, and the user who registered it last) and `vapid_keypair`, this server's
+rather than replacing it: `push_subscriptions` (one row per browser, or per Android phone that
+receives through a UnifiedPush helper app, which hands it a Web Push endpoint the same way;
+each row carries that device's own preferences and the user who registered it last) and `vapid_keypair`, this server's
 signing identity.
 The keypair is generated the first time it is asked for rather than provisioned — nothing seeds
 it, and no chart value or environment variable carries it — with the private key encrypted the
@@ -819,7 +820,7 @@ the push service is its own protocol-level unsubscribe signal and deletes the ro
 is stamped `failed_at` and left for the next alert to try again — an outbound push is never
 awaited inline in the listener, which would delay every event still queued behind it.
 
-The endpoint is a URL the browser chose, and the server POSTs to it from wherever it runs, so it
+The endpoint is a URL the browser or helper app chose, and the server POSTs to it from wherever it runs, so it
 is held to public addresses (`push/endpoint_guard.py`): registration refuses one that is, or
 resolves to, a loopback, private, link-local, unique-local or otherwise non-global address, and
 the send connects through a connector that checks the address it is about to reach, for every
@@ -838,10 +839,11 @@ registered for another.
 
 ```
 phone ──register──► relay ──ticket──► phone ──ticket + content key──► this server
-this server ──sealed envelope + ticket──► relay ──► APNs ──► phone's notification extension
+this server ──sealed envelope + ticket──► relay ──► APNs or FCM ──► the app, which opens it
 ```
 
-- **Registration.** The phone registers its device token with the relay, which returns a sealed,
+- **Registration.** The phone registers its device token (APNs on an iPhone, FCM on an Android
+  phone with Google Play services) with the relay, which returns a sealed,
   expiring ticket only the relay can open. The phone hands that ticket and a content key it
   generated to this server (`POST /api/alerts/subscriptions/native`); both are stored encrypted
   under `ENCRYPTION_KEY`, never returned, and refreshed by the app at least daily.

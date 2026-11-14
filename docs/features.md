@@ -217,6 +217,9 @@ Everything MailVerdict does, area by area. The [README](../README.md) has the ov
 - Web Push requires a home-screen install on iOS and iPadOS, and stops the moment the browser
   itself is quit on a desktop. The durable list is what a closed tab or a declined permission falls
   back to.
+- The iPhone and Android apps get the same alerts as system notifications: through the apps'
+  push relay, or on an Android phone without Google Play services through a UnifiedPush helper
+  app ([README](../README.md#on-a-phone) has what each path reveals to whom).
 - An alert resolves itself once its mail is read anywhere, and a setting keeps new-mail alerts out
   of the bell's badge so it counts only system notifications. Calendar reminders are not delivered
   as alerts.
