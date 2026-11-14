@@ -10,7 +10,9 @@ and left for the next alert.
 
 Two transports. A browser ("webpush") is sent the alert over Web Push,
 signed with this server's VAPID key (push/vapid.py): a 404 or 410 from the
-push service is its own protocol-level unsubscribe signal (RFC 8030 s7).
+push service is its own protocol-level unsubscribe signal (RFC 8030 s7). It
+connects only to public addresses (push/endpoint_guard.py); an endpoint
+that is not, or cannot be reached at all, is a failed send like any other.
 A phone app ("native") is sent an envelope sealed with its own content key
 (push/envelope.py) through its push relay (push/relay.py), carrying its
 user's badge (alerts/badge.py) and that user's mail alerts recently
@@ -27,12 +29,14 @@ import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+import aiohttp
 from pywebpush import WebPushException, webpush_async
 
 from mail_verdict.alerts.badge import badge_count
 from mail_verdict.auth.scope import Scope
 from mail_verdict.core.encryption import EncryptionError
 from mail_verdict.database.repository import AlertRepository, PushSubscriptionRepository
+from mail_verdict.push.endpoint_guard import PublicOnlyConnector
 from mail_verdict.push.envelope import MAX_RESOLVED_IDS, alert_payload, seal_payload
 from mail_verdict.push.relay import RelayOutcome
 from mail_verdict.push.vapid import VapidUnavailableError
@@ -168,18 +172,23 @@ async def _send_webpush(
         }
     )
     try:
-        await webpush_async(
-            subscription_info={
-                "endpoint": sub.endpoint,
-                "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
-            },
-            data=payload,
-            vapid_private_key=vapid,
-            vapid_claims={"sub": _VAPID_SUBJECT},
-            ttl=_TTL_SECONDS,
-        )
+        async with aiohttp.ClientSession(connector=PublicOnlyConnector()) as session:
+            await webpush_async(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                },
+                data=payload,
+                vapid_private_key=vapid,
+                vapid_claims={"sub": _VAPID_SUBJECT},
+                ttl=_TTL_SECONDS,
+                aiohttp_session=session,
+            )
     except WebPushException as exc:
         return RelayOutcome.GONE if exc.status_code in (404, 410) else RelayOutcome.FAILED
+    except (aiohttp.ClientError, OSError, asyncio.TimeoutError) as exc:
+        logger.warning("Web Push to subscription %s could not be sent: %s", sub.id, exc)
+        return RelayOutcome.FAILED
     return RelayOutcome.DELIVERED
 
 

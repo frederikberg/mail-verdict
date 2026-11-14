@@ -12342,7 +12342,7 @@
         ]
       },
       "post": {
-        "description": "Register this device for the caller, or refresh it if `endpoint` is\nalready registered (see PushSubscriptionRepository.upsert).",
+        "description": "Register this device for the caller, or refresh it if `endpoint` is\nalready registered (see PushSubscriptionRepository.upsert). 400 for an\nendpoint that is, or resolves to, a non-public address\n(push/endpoint_guard.py).",
         "operationId": "register_push_subscription_alerts_subscriptions_post",
         "requestBody": {
           "content": {
