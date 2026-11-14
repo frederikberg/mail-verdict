@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.0.1] - 2026-11-14
+
+### Fixed
+
+- A Web Push endpoint on a loopback, private, link-local or other non-public address is refused
+  at registration (`400`), and a send never connects to such an address, whatever the endpoint's
+  name resolves to by then.
+- A push that cannot connect at all (an unreachable or refused endpoint) is a failed send: the
+  test route answers the documented `502` instead of `500`, and the device is marked failed.
+
 ## [9.0.0] - 2026-11-14
 
 ### Added

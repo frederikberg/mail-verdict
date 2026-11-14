@@ -56,6 +56,7 @@ from mail_verdict.api.schemas import (
 from mail_verdict.auth.scope import Scope, ScopeDenied
 from mail_verdict.database.connection import get_db_connection
 from mail_verdict.database.models import Alert, PushSubscription
+from mail_verdict.push.endpoint_guard import EndpointRefused, check_push_endpoint
 from mail_verdict.push.relay import RelayOutcome, get_relay_client
 from mail_verdict.push.send import PushUnavailableError, send_to_subscription
 from mail_verdict.push.vapid import VapidUnavailableError, get_vapid_key_repo
@@ -185,7 +186,13 @@ async def register_push_subscription(
     body: PushSubscriptionCreate, scope: Scope = Depends(current_scope),
 ) -> PushSubscriptionResponse:
     """Register this device for the caller, or refresh it if `endpoint` is
-    already registered (see PushSubscriptionRepository.upsert)."""
+    already registered (see PushSubscriptionRepository.upsert). 400 for an
+    endpoint that is, or resolves to, a non-public address
+    (push/endpoint_guard.py)."""
+    try:
+        await check_push_endpoint(body.endpoint)
+    except EndpointRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     repo = get_push_subscription_repo()
     row = await repo.upsert(
         scope.require_user(), endpoint=body.endpoint, p256dh=body.keys.p256dh, auth=body.keys.auth,

@@ -819,6 +819,15 @@ the push service is its own protocol-level unsubscribe signal and deletes the ro
 is stamped `failed_at` and left for the next alert to try again — an outbound push is never
 awaited inline in the listener, which would delay every event still queued behind it.
 
+The endpoint is a URL the browser chose, and the server POSTs to it from wherever it runs, so it
+is held to public addresses (`push/endpoint_guard.py`): registration refuses one that is, or
+resolves to, a loopback, private, link-local, unique-local or otherwise non-global address, and
+the send connects through a connector that checks the address it is about to reach, for every
+connection including redirects, so a name that resolves elsewhere later is refused too. A send
+that cannot connect at all is a failure like any other: `failed_at`, and `502` from the test
+route. Native push is not affected: its relays are `push.relay_urls`, configuration rather than
+client input.
+
 A phone app, iPhone or Android, is a second transport on the same table: a `push_subscriptions` row with
 `transport = 'native'`, so every rule above — folder scope, staging, exactly-once, resolution —
 applies to it unchanged. Only the app's publisher can sign pushes for the app, so a server never
