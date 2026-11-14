@@ -3,11 +3,13 @@ Signed-in phones, browsers and machine clients (auth/sign_ins.py), and
 revoking them.
 
 Anyone sees and revokes their own; an admin any one, and every sign-in of a
-person at once. Revoking keeps the row, so the same sign-in stays refused;
+person at once. Revoking also deletes the push subscriptions registered
+under the sign-in. Revoking keeps the row, so the same sign-in stays refused;
 a phone signed in again is a new row, and a person's browsers come back once
 they sign in again at the identity provider.
 
 GET  /api/me/sign-ins                          -- the caller's sign-ins
+POST /api/me/sign-ins/current/revoke           -- sign out the sign-in making the request
 POST /api/me/sign-ins/{sign_in_id}/revoke      -- revoke one of them
 GET  /api/admin/sign-ins                       -- every sign-in (?user_id=, ?kind=)
 POST /api/admin/sign-ins/{sign_in_id}/revoke   -- revoke any one
@@ -22,14 +24,14 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import ColumnElement, func, select, update
+from sqlalchemy import ColumnElement, delete, func, select, update
 
 from mail_verdict.api.deps import require_admin, require_principal
 from mail_verdict.auth.ownership import user_changed_on_commit
 from mail_verdict.auth.principal import Principal
 from mail_verdict.auth.sign_ins import get_sign_in_registry
 from mail_verdict.database.connection import get_db_connection
-from mail_verdict.database.models import SignIn, User
+from mail_verdict.database.models import PushSubscription, SignIn, User
 
 me_router = APIRouter(prefix="/me/sign-ins", tags=["sign-ins"])
 admin_router = APIRouter(prefix="/admin", tags=["sign-ins"], dependencies=[Depends(require_admin)])
@@ -79,20 +81,28 @@ async def _list(principal: Principal, *conditions: ColumnElement[bool]) -> list[
 
 async def revoke_sign_ins(*conditions: ColumnElement[bool]) -> int:
     """
-    Revoke every unrevoked sign-in matching `conditions`, end their open
-    event streams and drop what this replica remembers about them.
+    Revoke every unrevoked sign-in matching `conditions`, delete the push
+    subscriptions registered under them -- a revoked phone or browser stops
+    receiving notifications, whatever its push service would still accept --
+    end their open event streams and drop what this replica remembers.
 
     Returns:
         How many were revoked.
     """
     async with get_db_connection().session() as session:
-        result = await session.execute(
-            update(SignIn)
-            .where(*conditions, SignIn.revoked_at.is_(None))
-            .values(revoked_at=func.now())
-        )
-        revoked = int(result.rowcount or 0)  # type: ignore[attr-defined]
+        revoked_ids = (
+            await session.execute(
+                update(SignIn)
+                .where(*conditions, SignIn.revoked_at.is_(None))
+                .values(revoked_at=func.now())
+                .returning(SignIn.id)
+            )
+        ).scalars().all()
+        revoked = len(revoked_ids)
         if revoked:
+            await session.execute(
+                delete(PushSubscription).where(PushSubscription.sign_in_id.in_(revoked_ids))
+            )
             user_changed_on_commit(session)
     registry = get_sign_in_registry()
     if registry is not None:
@@ -120,6 +130,27 @@ async def list_own_sign_ins(
 ) -> list[SignInResponse]:
     """The caller's sign-ins, live ones first, most recently seen first."""
     return await _list(principal, SignIn.user_id == principal.user_id)
+
+
+@me_router.post("/current/revoke", response_model=SignInResponse)
+async def revoke_current_sign_in(
+    principal: Principal = Depends(require_principal),
+) -> SignInResponse:
+    """Sign out the phone or browser making this request, and delete the
+    push subscriptions registered under it: what a phone app calls at
+    sign-out, while it still holds its token. Its next request is refused.
+    400 for a machine client, whose subject would stay refused for good --
+    an access key is signed out from the list or by an admin."""
+    if principal.sign_in_id is None:
+        raise HTTPException(status_code=404, detail="This request carries no sign-in")
+    async with get_db_connection().session() as session:
+        kind = await session.scalar(select(SignIn.kind).where(SignIn.id == principal.sign_in_id))
+    if kind == "machine":
+        raise HTTPException(
+            status_code=400,
+            detail="an access key is signed out from the list of sign-ins, not by itself",
+        )
+    return await _revoke_one(principal.sign_in_id, principal, own=True)
 
 
 @me_router.post("/{sign_in_id}/revoke", response_model=SignInResponse)

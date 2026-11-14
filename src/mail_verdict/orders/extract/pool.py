@@ -4,13 +4,15 @@ a scan can take seconds of CPU; a thread would still hold the interpreter lock
 against the event loop, and a crash would take the API down. One spawned child
 does the work: a document that outruns its budget or kills the child costs the
 child, never the API -- the pool is replaced and the document comes back as
-method `failed`.
+method `failed`. A new child is started, under its own budget, before it is
+handed a document, so the document's budget is the document's alone.
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 import logging
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
@@ -34,6 +36,18 @@ def read_in_child(
     return extract_bytes(data, content_type, filename, limits)
 
 
+# Imported by every new child as it starts, so the first document's budget
+# does not pay for them: the readers' libraries (PDFium, zxing-cpp, Pillow,
+# which load nowhere but in the child).
+_CHILD_IMPORTS = ("mail_verdict.orders.extract.reader",)
+
+
+def child_started(reader_module: str) -> None:
+    """Run in a new child: import what reading needs, then return."""
+    for module in (*_CHILD_IMPORTS, reader_module):
+        importlib.import_module(module)
+
+
 class ExtractionPool:
     """A one-child process pool that reads documents with a time budget."""
 
@@ -55,6 +69,17 @@ class ExtractionPool:
             executor.kill_workers()
             executor.shutdown(wait=False, cancel_futures=True)
 
+    async def _start(self, loop: asyncio.AbstractEventLoop) -> ProcessPoolExecutor:
+        """The pool, its child started (child_start_timeout_seconds)."""
+        if self._executor is not None:
+            return self._executor
+        executor = self._ensure()
+        await asyncio.wait_for(
+            loop.run_in_executor(executor, child_started, self._reader.__module__),
+            timeout=self._limits.child_start_timeout_seconds,
+        )
+        return executor
+
     async def extract(self, data: bytes, content_type: str, filename: str) -> ExtractedDocument:
         """
         Read one document in the child.
@@ -68,13 +93,14 @@ class ExtractionPool:
 
         Returns:
             The document; method `failed` with `error` `timeout` or `crash`
-            when the child outran `timeout_seconds` or died
+            when the child outran its start or `timeout_seconds`, or died
         """
         async with self._lock:
             loop = asyncio.get_running_loop()
             try:
+                executor = await self._start(loop)
                 future = loop.run_in_executor(
-                    self._ensure(), self._reader, data, content_type, filename, self._limits,
+                    executor, self._reader, data, content_type, filename, self._limits,
                 )
                 return await asyncio.wait_for(future, timeout=self._limits.timeout_seconds)
             except TimeoutError:

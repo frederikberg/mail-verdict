@@ -47,7 +47,10 @@ logger = logging.getLogger(__name__)
 # (tests/unit/test_lock_keys.py checks them all).
 _OWNERLESS_ALERT_LOCK_KEY = 761_035_700
 
-_POLL_INTERVAL_SECONDS = 60.0
+# An ownerless account is rare and nothing about it is urgent; a slow pass
+# keeps this timer off the minute boundary the other periodic passes share,
+# each of which holds two pooled connections while it runs.
+_POLL_INTERVAL_SECONDS = 300.0
 
 ALERT_KIND = "account_unowned"
 DEDUPE_PREFIX = "account-unowned:"

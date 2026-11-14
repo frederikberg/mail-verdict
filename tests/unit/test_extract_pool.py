@@ -74,6 +74,22 @@ async def test_the_same_child_serves_successive_documents(pool) -> None:  # type
 
 
 @pytest.mark.asyncio
+async def test_a_childs_start_is_not_part_of_a_documents_budget(pool) -> None:  # type: ignore[no-untyped-def]
+    """A spawned child takes seconds to start on a loaded machine, longer
+    than this budget; the first document after every replacement would
+    otherwise fail as a timeout it never caused."""
+    extraction = pool(read_or_misbehave, timeout_seconds=0.2)
+
+    first = await extraction.extract(b"fine", "", "first.bin")
+    died = await extraction.extract(b"die", "", "bomb.bin")
+    after = await extraction.extract(b"fine", "", "after.bin")
+
+    assert first.method == "text_layer"
+    assert (died.method, died.error) == ("failed", "crash")
+    assert after.method == "text_layer"
+
+
+@pytest.mark.asyncio
 async def test_a_timeout_is_a_failed_document_and_the_pool_is_replaced(pool) -> None:  # type: ignore[no-untyped-def]
     extraction = pool(read_or_misbehave, timeout_seconds=1.5)
     warm = await extraction.extract(b"fine", "", "warm.bin")

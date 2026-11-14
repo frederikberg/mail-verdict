@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.1.0] - 2026-11-14
+
+### Added
+
+- `POST /api/me/sign-ins/current/revoke` signs out the phone or browser making the request, for a
+  phone app to call at sign-out while it still holds its token.
+- `push.webpush_timeout_seconds` bounds a Web Push send, and `extraction.child_start_timeout_seconds`
+  the start of a new attachment-reading child.
+
+### Fixed
+
+- Revoking a sign-in (one device, signing a person out everywhere, removing a subject) deletes the
+  push subscriptions registered under it, so a phone signed out remotely stops receiving
+  notifications. A subscription records the sign-in that registered or last refreshed it; a
+  phone's daily refresh records it for devices registered before.
+- A Web Push send gives up after `push.webpush_timeout_seconds`; it had no timeout at all.
+- The first attachment read by a new extraction child no longer fails as a timeout when the child
+  takes longer to start than the document's budget: the child starts under a budget of its own.
+- The browser test seeds give every account they write an owner.
+
 ### Fixed
 
 - The README, features and architecture notes describe the Android app and both of its

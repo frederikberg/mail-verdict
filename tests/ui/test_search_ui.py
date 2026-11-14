@@ -66,6 +66,13 @@ def _seed_scale_fixture(postgres_url: str, count: int) -> tuple[str, str]:
             )
             await conn.execute(
                 text(
+                    "INSERT INTO account_owners (account_id, user_id) "
+                    "VALUES (:id, '00000000-0000-0000-0000-000000000001') ON CONFLICT DO NOTHING"
+                ),
+                {"id": account_id},
+            )
+            await conn.execute(
+                text(
                     "INSERT INTO folders (id, account_id, imap_name) "
                     "VALUES (:id, :account_id, 'INBOX')"
                 ),
@@ -466,6 +473,13 @@ def _seed_avatar_fixture(postgres_url: str) -> tuple[str, str]:
                     "'\\x00' || convert_to('pw', 'UTF8'))"
                 ),
                 {"id": account_id, "name": email, "email": email},
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO account_owners (account_id, user_id) "
+                    "VALUES (:id, '00000000-0000-0000-0000-000000000001') ON CONFLICT DO NOTHING"
+                ),
+                {"id": account_id},
             )
             await conn.execute(
                 text(

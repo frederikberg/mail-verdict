@@ -53,6 +53,7 @@ from mail_verdict.api.schemas import (
     PushSubscriptionUpdate,
     VapidPublicKeyResponse,
 )
+from mail_verdict.auth.principal import current_principal
 from mail_verdict.auth.scope import Scope, ScopeDenied
 from mail_verdict.database.connection import get_db_connection
 from mail_verdict.database.models import Alert, PushSubscription
@@ -181,6 +182,13 @@ async def list_push_subscriptions(
     return [PushSubscriptionResponse.model_validate(row) for row in rows]
 
 
+def _caller_sign_in() -> uuid.UUID | None:
+    """The sign-in making this request, which a device registered now is
+    tied to: revoking that sign-in deletes the device (api/sign_ins.py)."""
+    principal = current_principal()
+    return principal.sign_in_id if principal is not None else None
+
+
 @router.post("/subscriptions", response_model=PushSubscriptionResponse, status_code=201)
 async def register_push_subscription(
     body: PushSubscriptionCreate, scope: Scope = Depends(current_scope),
@@ -196,7 +204,7 @@ async def register_push_subscription(
     repo = get_push_subscription_repo()
     row = await repo.upsert(
         scope.require_user(), endpoint=body.endpoint, p256dh=body.keys.p256dh, auth=body.keys.auth,
-        label=body.label,
+        label=body.label, sign_in_id=_caller_sign_in(),
     )
     return PushSubscriptionResponse.model_validate(row)
 
@@ -278,6 +286,7 @@ async def register_native_subscription(
         encrypted_relay_ticket=encrypted_ticket, encrypted_content_key=encrypted_key,
         label=body.label,
         muted_channels=list(body.muted_channels) if body.muted_channels is not None else None,
+        sign_in_id=_caller_sign_in(),
     )
     return PushSubscriptionResponse.model_validate(row)
 

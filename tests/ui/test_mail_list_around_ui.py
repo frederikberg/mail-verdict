@@ -59,6 +59,13 @@ def _seed_deep_target(postgres_url: str) -> tuple[str, str, str]:
             )
             await conn.execute(
                 sa_text(
+                    "INSERT INTO account_owners (account_id, user_id) "
+                    "VALUES (:id, '00000000-0000-0000-0000-000000000001') ON CONFLICT DO NOTHING"
+                ),
+                {"id": account_id},
+            )
+            await conn.execute(
+                sa_text(
                     "INSERT INTO folders (id, account_id, imap_name) "
                     "VALUES (:id, :account_id, 'INBOX')"
                 ),

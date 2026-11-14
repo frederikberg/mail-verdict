@@ -85,6 +85,7 @@ def _relay_client(fake: _FakeRelay, encryption_key: str = _ENCRYPTION_KEY) -> Re
         config=PushConfig(
             relay_urls=[_RELAY], relay_app="mailverdict",
             read_sync_min_interval_seconds=600.0, relay_timeout_seconds=5.0,
+            webpush_timeout_seconds=5.0,
         ),
         transport=httpx.MockTransport(fake.handler),
     )

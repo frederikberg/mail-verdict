@@ -23,6 +23,7 @@ def _config(**overrides: Any) -> PushConfig:
     values: dict[str, Any] = {
         "relay_urls": [_RELAY], "relay_app": "mailverdict",
         "read_sync_min_interval_seconds": 600.0, "relay_timeout_seconds": 5.0,
+        "webpush_timeout_seconds": 5.0,
     }
     values.update(overrides)
     return PushConfig(**values)

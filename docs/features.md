@@ -298,8 +298,9 @@ mail client: a `mailto:` link opens the composer filled in from the link.
   screen of its own.
 - Signed-in devices lists every phone (by the name it gives itself) and access key that has used
   the account, and the person's web browsers as one entry, with when each was last used. Signing
-  one out takes effect on its next request: a phone stays out until it signs in again, an access
-  key for good, and the browsers until their person signs in again at the identity provider.
+  one out takes effect on its next request and ends its notifications at once: a phone stays out
+  until it signs in again, an access key for good, and the browsers until their person signs in
+  again at the identity provider.
 - Folders are chosen with one picker, for a unified view and for the folders that raise a
   notification: a filter, a switch hiding system folders (Drafts, Sent, Trash, Junk and folders
   the sidebar hides), and a collapsible group per account whose checkbox ticks everything it lists.

@@ -1991,9 +1991,16 @@ class PushSubscription(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # The sign-in that registered (or last refreshed) the device: revoking it
+    # deletes the subscription (api/sign_ins.py), so a signed-out phone stops
+    # receiving its user's mail. NULL for a row written by nobody's sign-in.
+    sign_in_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("sign_ins.id", ondelete="CASCADE"), nullable=True,
+    )
 
     __table_args__ = (
         Index("ix_push_subscriptions_user_id", "user_id"),
+        Index("ix_push_subscriptions_sign_in_id", "sign_in_id"),
         CheckConstraint(
             "transport IN ('webpush', 'native')", name="ck_push_subscriptions_transport",
         ),

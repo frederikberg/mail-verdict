@@ -34,6 +34,7 @@ from pywebpush import WebPushException, webpush_async
 
 from mail_verdict.alerts.badge import badge_count
 from mail_verdict.auth.scope import Scope
+from mail_verdict.config import get_config
 from mail_verdict.core.encryption import EncryptionError
 from mail_verdict.database.repository import AlertRepository, PushSubscriptionRepository
 from mail_verdict.push.endpoint_guard import PublicOnlyConnector
@@ -182,6 +183,7 @@ async def _send_webpush(
                 vapid_private_key=vapid,
                 vapid_claims={"sub": _VAPID_SUBJECT},
                 ttl=_TTL_SECONDS,
+                timeout=get_config().push.webpush_timeout_seconds,
                 aiohttp_session=session,
             )
     except WebPushException as exc:

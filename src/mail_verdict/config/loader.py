@@ -358,6 +358,7 @@ class PushConfig(BaseModel):
     relay_app: str = Field(min_length=1)
     read_sync_min_interval_seconds: float
     relay_timeout_seconds: float
+    webpush_timeout_seconds: float
 
 
 class MailActionsConfig(BaseModel):
@@ -400,6 +401,7 @@ class ExtractionConfig(BaseModel):
 
     max_document_bytes: int
     timeout_seconds: float
+    child_start_timeout_seconds: float
     max_pdf_pages: int
     barcode_pages: int
     ocr_pages: int
