@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.2.0] - 2026-11-15
+
 ### Added
 
 - A webhook header can reference a stored OAuth2 client as `{{oauth:NAME}}`: the secret holds the
