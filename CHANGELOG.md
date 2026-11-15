@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- A webhook header can reference a stored OAuth2 client as `{{oauth:NAME}}`: the secret holds the
+  client's credentials as JSON, and the delivery fetches an access token with the client-credentials
+  grant, so a receiver that only takes short-lived tokens keeps working with no one re-entering a
+  value. `webhooks.token_refresh_margin_seconds` sets how long before expiry a token is fetched
+  again.
+
 ## [9.1.0] - 2026-11-14
 
 ### Added

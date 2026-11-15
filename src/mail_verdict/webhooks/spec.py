@@ -7,12 +7,15 @@ is always the message's raw RFC 822 source, unmodified, sent as
 templated JSON body, say) is an addition rather than a change of shape; it
 accepts only `raw_message` today.
 
-Header values may reference a stored secret as `{{secret:NAME}}`. The
-reference is what a rule, a delivery row and every API response carries;
-the value is substituted when the request is made (worker.py) and
-nowhere else. A header whose name suggests a credential must carry such a
-reference, so a token is never typed into a rule where the pipeline API
-would hand it back.
+Header values may reference a stored secret as `{{secret:NAME}}`, or the
+access token of a stored OAuth2 client as `{{oauth:NAME}}` (webhooks/oauth.py:
+the secret NAME holds the client's credentials, and the token is fetched with
+them when a request is made, so a receiver that only takes short-lived
+tokens keeps working). The reference is what a rule, a delivery row and every
+API response carries; the value is substituted when the request is made
+(worker.py) and nowhere else. A header whose name suggests a credential must
+carry such a reference, so a token is never typed into a rule where the
+pipeline API would hand it back.
 """
 
 from __future__ import annotations
@@ -24,6 +27,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 SECRET_REFERENCE = re.compile(r"\{\{secret:([A-Za-z][A-Za-z0-9_]{0,63})\}\}")
+OAUTH_REFERENCE = re.compile(r"\{\{oauth:([A-Za-z][A-Za-z0-9_]{0,63})\}\}")
+_ANY_REFERENCE = re.compile(r"\{\{(secret|oauth):([A-Za-z][A-Za-z0-9_]{0,63})\}\}")
 SECRET_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 WEBHOOK_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 
@@ -81,10 +86,10 @@ class WebhookSpec(BaseModel):
                 raise ValueError(f"header {header!r} is set by the delivery itself")
             if "\r" in value or "\n" in value:
                 raise ValueError(f"header {header!r} has a line break in its value")
-            if _CREDENTIAL_HEADER.search(header) and not SECRET_REFERENCE.search(value):
+            if _CREDENTIAL_HEADER.search(header) and not _ANY_REFERENCE.search(value):
                 raise ValueError(
                     f"header {header!r} looks like a credential and must reference a "
-                    "stored secret as {{secret:NAME}}"
+                    "stored secret as {{secret:NAME}} or a stored OAuth2 client as {{oauth:NAME}}"
                 )
         return self
 
@@ -98,14 +103,29 @@ def referenced_secrets(headers: Mapping[str, Any]) -> list[str]:
     return list(seen)
 
 
-def render_headers(headers: Mapping[str, str], secrets: Mapping[str, str]) -> dict[str, str]:
-    """Substitute every `{{secret:NAME}}` with its value from `secrets`.
+def referenced_oauth_clients(headers: Mapping[str, Any]) -> list[str]:
+    """Every OAuth2 client name the header values reference, in order, once each."""
+    seen: dict[str, None] = {}
+    for value in headers.values():
+        for name in OAUTH_REFERENCE.findall(str(value)):
+            seen.setdefault(name)
+    return list(seen)
+
+
+def render_headers(
+    headers: Mapping[str, str], secrets: Mapping[str, str],
+    tokens: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Substitute every `{{secret:NAME}}` with its value from `secrets` and
+    every `{{oauth:NAME}}` with its token from `tokens`, in one pass, so a
+    substituted value is never read as a reference itself.
 
     Raises:
-        KeyError: a referenced name is absent from `secrets` (the key is
-            the secret's name, never a value)
+        KeyError: a referenced name is absent from its mapping (the key is
+            the name, never a value)
     """
+    sources = {"secret": secrets, "oauth": tokens or {}}
     return {
-        header: SECRET_REFERENCE.sub(lambda m: secrets[m.group(1)], value)
+        header: _ANY_REFERENCE.sub(lambda m: sources[m.group(1)][m.group(2)], value)
         for header, value in headers.items()
     }

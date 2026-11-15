@@ -177,7 +177,8 @@ Everything MailVerdict does, area by area. The [README](../README.md) has the ov
   a rule the form cannot show exactly (a webhook, an unusual condition) opens as JSON instead of
   being simplified. A rule that deletes permanently asks for a confirmation when saved.
 - **Webhooks:** the message's raw source is posted to a URL, with a header that can take its value
-  from a named secret stored encrypted in the database (set under Admin → Secrets, never shown again). A
+  from a named secret stored encrypted in the database (set under Admin → Secrets, never shown again),
+  or a short-lived access token that MailVerdict fetches with a stored OAuth2 client's credentials. A
   delivery is queued, retried when the receiver is unavailable, never repeated once it succeeded,
   and raises an alert when it gives up. Mail that predates a rule can be sent once, oldest first,
   through the API. Only an administrator may write a webhook rule.

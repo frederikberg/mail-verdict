@@ -392,6 +392,7 @@ class WebhooksConfig(BaseModel):
     max_body_bytes: int
     poll_interval_seconds: float
     lease_seconds: float
+    token_refresh_margin_seconds: float
 
 
 class ExtractionConfig(BaseModel):
