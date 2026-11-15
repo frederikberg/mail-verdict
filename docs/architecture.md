@@ -1155,8 +1155,11 @@ concurrent delivery by default) makes the request.
   sending something partial.
 - **Secrets.** `secrets` holds named values encrypted with `security.encryption_key`, the same
   scheme as provider keys (`settings/secret_store.py`). A rule's header values reference one as
-  `{{secret:NAME}}`; the delivery row stores the reference, and the worker substitutes the value
-  when the request is made. No value, rendered header, response body or transport error text is
+  `{{secret:NAME}}`, or the access token of a stored OAuth2 client as `{{oauth:NAME}}` (the
+  secret holds the client's credentials as one JSON object; `webhooks/oauth.py` fetches the token
+  with the client-credentials grant and keeps it in memory until shortly before it expires); the
+  delivery row stores the reference, and the worker substitutes the value when the request is
+  made. No value, rendered header, response body or transport error text is
   logged or stored, and no endpoint returns a value. Deleting a secret a rule still names makes
   that rule's next delivery fail loudly.
 - **Backfill.** `webhooks/backfill.py` evaluates the named webhook's rule conditions against mail

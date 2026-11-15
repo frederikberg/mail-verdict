@@ -195,6 +195,10 @@ webhooks:
   # The worker renews it while a request is in flight, so this only
   # matters after a crash.
   lease_seconds: 120
+  # An access token fetched for a header (`{{oauth:NAME}}`) is fetched again
+  # once this little of its lifetime is left, or after half of it for a token
+  # that lives less than twice this.
+  token_refresh_margin_seconds: 60
 
 # Reading attachments for the orders pipeline (orders/extract/): PDF text,
 # barcodes, scanned pages through Tesseract, passes, calendars and invoices.

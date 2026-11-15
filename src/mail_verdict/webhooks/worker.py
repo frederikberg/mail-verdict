@@ -53,8 +53,13 @@ from mail_verdict.queue.backoff import compute_backoff
 from mail_verdict.queue.manager import QueueManager
 from mail_verdict.queue.worker_loop import default_worker_loop
 from mail_verdict.settings.secret_store import SecretUnavailableError
+from mail_verdict.webhooks.oauth import ClientTokenCache, ClientTokenError
 from mail_verdict.webhooks.repository import QUEUE_NAME
-from mail_verdict.webhooks.spec import referenced_secrets, render_headers
+from mail_verdict.webhooks.spec import (
+    referenced_oauth_clients,
+    referenced_secrets,
+    render_headers,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy import Table
@@ -99,12 +104,18 @@ def register_webhooks(
     starts until queue_manager.start(). One worker by default (a fresh
     queue's own concurrency), which is what makes deliveries sequential."""
 
+    tokens = ClientTokenCache(
+        request_timeout_seconds=cfg.request_timeout_seconds,
+        refresh_margin_seconds=cfg.token_refresh_margin_seconds,
+    )
+
     async def worker_body(worker_id: str, stop_event: asyncio.Event) -> None:
         work_queue = queue_manager.work_queue(QUEUE_NAME)
 
         async def handle_item(row: Mapping[str, Any]) -> None:
             await handle_delivery(
                 row, worker_id, work_queue, db, secret_repo, cfg, event_ring, vapid_repo,
+                tokens,
             )
 
         async def sweep_exhausted() -> None:
@@ -142,16 +153,18 @@ async def handle_delivery(
     cfg: WebhooksConfig,
     event_ring: EventRing | None,
     vapid_repo: VapidKeyRepository | None,
+    tokens: ClientTokenCache | None = None,
 ) -> None:
     """Make the request for one claimed delivery and leave the row terminal
-    or pending-for-retry."""
+    or pending-for-retry. `tokens` serves the `{{oauth:NAME}}` headers; a
+    delivery that needs one without it fails."""
     item_id: uuid.UUID = row["id"]
     try:
         source = await _load_source(db, row)
         if source is None:
             outcome = _Outcome("permanent", "the message is no longer in the mirror or a glacier")
         else:
-            outcome = await _attempt(row, source, secret_repo, cfg)
+            outcome = await _attempt(row, source, secret_repo, cfg, tokens)
     except Exception as exc:  # noqa: BLE001 -- anything unexpected is retried, then failed
         outcome = _Outcome("transient", f"unexpected {type(exc).__name__}")
         logger.warning(
@@ -225,6 +238,7 @@ async def fail_exhausted_deliveries(
 
 async def _attempt(
     row: Mapping[str, Any], source: _Source, secret_repo: SecretRepository, cfg: WebhooksConfig,
+    tokens: ClientTokenCache | None,
 ) -> _Outcome:
     config: Mapping[str, Any] = row["config"]
     if source.raw is None:
@@ -237,11 +251,21 @@ async def _attempt(
         )
 
     templates: Mapping[str, str] = config.get("headers") or {}
+    clients = referenced_oauth_clients(templates)
     try:
-        secrets = await secret_repo.resolve_many(referenced_secrets(templates))
+        stored = await secret_repo.resolve_many([*referenced_secrets(templates), *clients])
     except SecretUnavailableError as exc:
         return _Outcome("permanent", str(exc))
-    headers = render_headers(templates, secrets)
+    access_tokens: dict[str, str] = {}
+    if clients:
+        if tokens is None:
+            return _Outcome("permanent", "no OAuth2 client support is configured")
+        for oauth_client in clients:
+            try:
+                access_tokens[oauth_client] = await tokens.token(oauth_client, stored[oauth_client])
+            except ClientTokenError as exc:
+                return _Outcome("permanent" if exc.permanent else "transient", exc.detail)
+    headers = render_headers(templates, stored, access_tokens)
     if any(not _is_header_safe(v) for v in headers.values()):
         return _Outcome("permanent", "a header value, after substituting secrets, is not valid")
     headers["Content-Type"] = _BODY_CONTENT_TYPE

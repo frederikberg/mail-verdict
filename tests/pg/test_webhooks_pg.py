@@ -9,6 +9,7 @@ and the backfill sending existing mail oldest first exactly once.
 from __future__ import annotations
 
 import itertools
+import json
 import threading
 import time
 import uuid
@@ -33,6 +34,7 @@ from mail_verdict.queue.work_queue import WorkQueue
 from mail_verdict.settings.secret_store import SecretRepository
 from mail_verdict.webhooks import repository
 from mail_verdict.webhooks.backfill import BACKFILL_PRIORITY, backfill_webhook
+from mail_verdict.webhooks.oauth import ClientTokenCache
 from mail_verdict.webhooks.worker import fail_exhausted_deliveries, handle_delivery
 
 pytestmark = pytest.mark.asyncio
@@ -94,7 +96,7 @@ def _cfg(max_attempts: int = 3, request_timeout_seconds: float = 5) -> WebhooksC
     return WebhooksConfig(
         request_timeout_seconds=request_timeout_seconds, max_attempts=max_attempts,
         base_delay_seconds=0, max_delay_seconds=0, max_body_bytes=1_000_000,
-        poll_interval_seconds=0.1, lease_seconds=60,
+        poll_interval_seconds=0.1, lease_seconds=60, token_refresh_margin_seconds=30,
     )
 
 
@@ -176,7 +178,10 @@ async def _enqueue(
         )
 
 
-async def _drain(db: DatabaseConnection, secrets: SecretRepository, cfg: WebhooksConfig) -> int:
+async def _drain(
+    db: DatabaseConnection, secrets: SecretRepository, cfg: WebhooksConfig,
+    tokens: ClientTokenCache | None = None,
+) -> int:
     """Claim and handle until nothing is due, as the worker loop would."""
     queue = WorkQueue(db, WebhookDelivery.__table__)  # type: ignore[arg-type]
     handled = 0
@@ -184,7 +189,7 @@ async def _drain(db: DatabaseConnection, secrets: SecretRepository, cfg: Webhook
         worker_id="t", batch_size=1, lease_seconds=60, max_attempts=cfg.max_attempts,
     ):
         for row in rows:
-            await handle_delivery(row, "t", queue, db, secrets, cfg, None, None)
+            await handle_delivery(row, "t", queue, db, secrets, cfg, None, None, tokens)
             handled += 1
     return handled
 
@@ -217,6 +222,134 @@ async def _secrets(db: DatabaseConnection, *, set_token: bool = True) -> SecretR
     else:
         await repo.delete("CANTEEN_TOKEN")
     return repo
+
+
+class _TokenEndpoint:
+    """A token endpoint answering every request from one scripted (status, body)."""
+
+    def __init__(self, status: int, body: dict[str, Any]) -> None:
+        self.requests: list[dict[str, Any]] = []
+        endpoint = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802
+                length = int(self.headers.get("Content-Length", 0))
+                endpoint.requests.append({
+                    "headers": dict(self.headers.items()), "form": parse_qs(
+                        self.rfile.read(length).decode()),
+                })
+                payload = json.dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args: object) -> None:
+                return
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self._server.server_address[1]}/oauth/v2/token"
+        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+
+    def close(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+
+
+def _oauth_effect(url: str, name: str = "canteen") -> Webhook:
+    effect = parse_effect({"webhook": {
+        "name": name, "url": url, "headers": {"Authorization": "Bearer {{oauth:RECEIVER}}"},
+    }})
+    assert isinstance(effect, Webhook)
+    return effect
+
+
+def _client_document(token_url: str) -> str:
+    return json.dumps({
+        "token_url": token_url, "client_id": "forwarder", "client_secret": _TOKEN,
+        "scope": "openid audience",
+    })
+
+
+async def test_an_oauth_header_carries_a_token_fetched_once_for_several_deliveries(
+    migrated_db: DatabaseConnection, stub_factory: Any,
+) -> None:
+    receiver = stub_factory([201])
+    endpoint = _TokenEndpoint(200, {"access_token": "at-live", "expires_in": 3600})
+    try:
+        secrets = await _secrets(migrated_db)
+        await secrets.put("RECEIVER", _client_document(endpoint.url))
+        cfg = _cfg()
+        tokens = ClientTokenCache(
+            request_timeout_seconds=cfg.request_timeout_seconds,
+            refresh_margin_seconds=cfg.token_refresh_margin_seconds,
+        )
+        account_id, first, first_header = await _setup(migrated_db)
+        async with migrated_db.session() as session:
+            folder_id = await _seed_folder(session, account_id, "archive")
+            second, second_header = await _seed_message(
+                session, account_id, folder_id, subject="Zweite Mail",
+            )
+        effect = _oauth_effect(receiver.url)
+        await _enqueue(migrated_db, effect, account_id, first, first_header)
+        await _enqueue(migrated_db, effect, account_id, second, second_header)
+
+        assert await _drain(migrated_db, secrets, cfg, tokens) == 2
+
+        assert [r["headers"]["Authorization"] for r in receiver.requests] == ["Bearer at-live"] * 2
+        assert len(endpoint.requests) == 1
+        assert endpoint.requests[0]["form"] == {
+            "grant_type": ["client_credentials"], "scope": ["openid audience"],
+        }
+        assert endpoint.requests[0]["headers"]["Authorization"].startswith("Basic ")
+        assert await _alerts(migrated_db, account_id) == []
+    finally:
+        endpoint.close()
+
+
+async def test_a_refused_client_fails_the_delivery_with_an_alert_that_names_no_value(
+    migrated_db: DatabaseConnection, stub_factory: Any,
+) -> None:
+    receiver = stub_factory([201])
+    endpoint = _TokenEndpoint(401, {"error": "invalid_client", "echo": _TOKEN})
+    try:
+        secrets = await _secrets(migrated_db)
+        await secrets.put("RECEIVER", _client_document(endpoint.url))
+        cfg = _cfg()
+        tokens = ClientTokenCache(
+            request_timeout_seconds=cfg.request_timeout_seconds,
+            refresh_margin_seconds=cfg.token_refresh_margin_seconds,
+        )
+        account_id, message_id, header = await _setup(migrated_db)
+        await _enqueue(migrated_db, _oauth_effect(receiver.url), account_id, message_id, header)
+
+        await _drain(migrated_db, secrets, cfg, tokens)
+
+        assert receiver.requests == []
+        row = await _row(migrated_db, account_id)
+        assert row.status == "failed"
+        assert row.last_error == "token request for RECEIVER answered HTTP 401"
+        alerts = await _alerts(migrated_db, account_id)
+        assert [a.kind for a in alerts] == ["webhook_failed"]
+        assert _TOKEN not in alerts[0].title + alerts[0].body
+    finally:
+        endpoint.close()
+
+
+async def test_an_oauth_header_without_client_support_fails_instead_of_sending_it_bare(
+    migrated_db: DatabaseConnection, stub_factory: Any,
+) -> None:
+    receiver = stub_factory([201])
+    secrets = await _secrets(migrated_db)
+    await secrets.put("RECEIVER", _client_document("http://127.0.0.1:9/token"))
+    account_id, message_id, header = await _setup(migrated_db)
+    await _enqueue(migrated_db, _oauth_effect(receiver.url), account_id, message_id, header)
+
+    await _drain(migrated_db, secrets, _cfg())
+
+    assert receiver.requests == []
+    assert (await _row(migrated_db, account_id)).status == "failed"
 
 
 async def test_success_posts_the_raw_bytes_once_with_the_resolved_header(

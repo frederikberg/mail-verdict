@@ -277,6 +277,21 @@ A header whose name suggests a credential (`Authorization`, anything with `token
 `secret`, `cookie` or `password`) must reference a stored secret, so a token is never written into
 the rule itself.
 
+A receiver that takes only short-lived tokens is called with one fetched when the delivery runs:
+store the OAuth2 client's credentials as one JSON secret and reference it as `{{oauth:NAME}}`.
+
+```bash
+curl -X PUT localhost:8080/api/secrets/INBOX_CLIENT -H 'content-type: application/json' -d '{
+  "value": "{\"token_url\": \"https://login.example.com/oauth/v2/token\", \"client_id\": \"forwarder\", \"client_secret\": \"...\", \"scope\": \"openid\"}"
+}'
+# the rule's header: "Authorization": "Bearer {{oauth:INBOX_CLIENT}}"
+```
+
+The token comes from the client-credentials grant (HTTP Basic client authentication; `scope` is
+optional) and is kept in memory until `webhooks.token_refresh_margin_seconds` before it expires.
+Replacing the secret replaces the token. A provider that refuses the client fails the delivery
+with an alert, like any other `4xx`; one that is busy or unreachable is retried.
+
 `header_match` and `header_exists` read the headers PostIMAP stores. It stores a header it parses
 into a structure as `[object Object]`, which includes every `List-*` header (`List-Id`,
 `List-Unsubscribe`) and `Content-Type`, so those cannot be matched until PostIMAP stores them as
