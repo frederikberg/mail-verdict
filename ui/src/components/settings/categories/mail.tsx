@@ -29,6 +29,13 @@ const FILING: FieldSpec[] = [
     help: "Archiving a message, or filing it as spam, marks it read as it moves. Mail another client puts in Archive is marked read too.",
     control: "switch",
   },
+  {
+    category: "mail",
+    key: "show_folder_totals",
+    label: "Show total message counts",
+    help: "Folders and unified views show how many messages they hold, dimmed beside the unread count. Applies on every device you sign in on.",
+    control: "switch",
+  },
 ];
 
 const SENDING: FieldSpec[] = [
@@ -117,7 +124,10 @@ export function MailSettings() {
           draft={draft}
           category="mail"
           area="user"
-          declared={["mark_read_on_file_to_archive_or_junk", "bell_badge_counts_new_mail", "notify_wait_seconds"]}
+          declared={[
+            "mark_read_on_file_to_archive_or_junk", "show_folder_totals", "bell_badge_counts_new_mail",
+            "notify_wait_seconds",
+          ]}
           // Written by the account order list and the unified views list.
           skip={["account_order", "unified_folder_order"]}
         />

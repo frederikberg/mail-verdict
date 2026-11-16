@@ -21,6 +21,7 @@ import {
 import { useUnsettledIntentsForFolder } from "@/hooks/use-intent-ledger";
 import { useFolderBulkAction } from "@/hooks/use-selection";
 import { useToast } from "@/hooks/use-toast";
+import { FolderTotal } from "@/components/sidebar/folder-total";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,9 @@ interface FolderRowMenuProps {
   folderName: string;
   badgeCount: number;
   totalCount: number;
+  /** Shows `totalCount` beside the badge (the mail.show_folder_totals
+   * setting; never for Drafts, whose badge already is its total). */
+  showTotal?: boolean;
   /** "Mark all as read" works against the glacier the same way it does
    * against an ordinary folder. "Empty folder" is left out for it: this
    * component's own bulk action (useFolderBulkAction) never sends
@@ -42,7 +46,7 @@ interface FolderRowMenuProps {
 }
 
 export function FolderRowMenu({
-  accountId, folderId, folderName, badgeCount, totalCount, isGlacier,
+  accountId, folderId, folderName, badgeCount, totalCount, showTotal, isGlacier,
 }: FolderRowMenuProps) {
   // Minted the moment the menu item is clicked, not deferred to the
   // confirm click -- the dialog must show the same count the request
@@ -91,6 +95,9 @@ export function FolderRowMenu({
         >
           {badgeCount}
         </Badge>
+      )}
+      {showTotal && (
+        <FolderTotal count={totalCount} className="ml-1.5 group-hover/menu-item:hidden" />
       )}
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger

@@ -24,6 +24,8 @@ Everything MailVerdict does, area by area. The [README](../README.md) has the ov
   list that stays smooth on large mailboxes.
 - **Unified views:** any set of your folders, across your accounts, merged into one list with an
   icon of its own in the sidebar. One folder can sit in several views. Views are yours alone.
+- Folders and views show their unread count; *Show total message counts* (Settings → Mail, off by
+  default) adds each one's total beside it, dimmed, on the web and in the app alike.
 - A conversation reads newest first. Any earlier message in it can be made the open one, so the
   toolbar and the reply act on that message instead of the newest. An open conversation updates
   live: a reply arriving, or your own sent reply, shows up in it without reopening it.
