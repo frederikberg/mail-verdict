@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.3.0] - 2026-11-16
+
 ### Added
 
 - *Show total message counts* (Settings → Mail, `mail.show_folder_totals`, off by default): folders
