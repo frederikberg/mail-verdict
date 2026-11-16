@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- *Show total message counts* (Settings → Mail, `mail.show_folder_totals`, off by default): folders
+  and unified views show their total number of messages, dimmed, beside the unread count.
+
+### Fixed
+
+- An event bound to another time zone shows that zone's own time under its start and end
+  ("12:00 in Los Angeles") rather than a bare zone name that read as the zone of the time above it.
+- Calendar dates, invitation cards and contact birthdays read day-first like every other date.
+
 ## [9.2.0] - 2026-11-15
 
 ### Added

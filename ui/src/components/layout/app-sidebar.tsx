@@ -29,6 +29,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
+import { FolderTotal } from "@/components/sidebar/folder-total";
+import { useSettings } from "@/hooks/use-settings";
 import { Truncate } from "@/components/ui/truncate";
 import { folderDisplayName } from "@/lib/folders";
 import {
@@ -167,6 +169,7 @@ interface FolderRowProps {
   isActive: boolean;
   badgeCount: number;
   totalCount: number;
+  showTotal: boolean;
   isGlacier: boolean;
   onSelect: (folderId: string) => void;
 }
@@ -174,8 +177,8 @@ interface FolderRowProps {
 /** One folder of an account, re-rendered only when its own props change --
  * a count changing in one folder leaves every other row alone. */
 function FolderRowImpl({
-  accountId, folderId, name, imapName, icon: Icon, isActive, badgeCount, totalCount, isGlacier,
-  onSelect,
+  accountId, folderId, name, imapName, icon: Icon, isActive, badgeCount, totalCount, showTotal,
+  isGlacier, onSelect,
 }: FolderRowProps) {
   return (
     <DroppableFolder folderId={folderId} folderName={name}>
@@ -191,6 +194,7 @@ function FolderRowImpl({
             folderName={name}
             badgeCount={badgeCount}
             totalCount={totalCount}
+            showTotal={showTotal}
             isGlacier={isGlacier}
           />
         )}
@@ -206,11 +210,13 @@ function UnifiedFolderRowImpl({
   view: uf,
   accounts,
   isActive,
+  showTotal,
   onSelect,
 }: {
   view: UnifiedFolderResponse;
   accounts: AccountResponse[] | undefined;
   isActive: boolean;
+  showTotal: boolean;
   onSelect: (folderName: string) => void;
 }) {
   const folderMapping = useMemo(
@@ -258,13 +264,15 @@ function UnifiedFolderRowImpl({
               ))}
             </span>
           )}
-          {uf.unread_count > 0 && (
-            <Badge
-              variant="secondary"
-              className="ml-auto h-5 min-w-5 justify-center px-1 text-xs"
-            >
-              {uf.unread_count}
-            </Badge>
+          {(uf.unread_count > 0 || showTotal) && (
+            <span className="ml-auto flex shrink-0 items-center gap-1.5">
+              {uf.unread_count > 0 && (
+                <Badge variant="secondary" className="h-5 min-w-5 justify-center px-1 text-xs">
+                  {uf.unread_count}
+                </Badge>
+              )}
+              {showTotal && <FolderTotal count={uf.total_count} />}
+            </span>
           )}
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -301,6 +309,9 @@ export function AppSidebar() {
   );
   const isUnified = useAtom(isUnifiedViewAtom)[0];
   const { data: accounts } = useAccounts();
+  // One subscriber for every row; a settings.changed event refetches it,
+  // so turning it on elsewhere shows here without a reload.
+  const showTotals = useSettings("mail").data?.show_folder_totals === true;
   const { data: folders, isPlaceholderData: foldersArePlaceholder } = useFolders(
     isUnified ? null : selectedAccountId,
   );
@@ -559,6 +570,7 @@ export function AppSidebar() {
                       view={uf}
                       accounts={accounts}
                       isActive={selectedUnifiedFolder === uf.unified_name}
+                      showTotal={showTotals}
                       onSelect={selectUnifiedFolder}
                     />
                   ))
@@ -575,6 +587,7 @@ export function AppSidebar() {
                         isActive={folder.folder_id === selectedFolderId}
                         badgeCount={getFolderBadgeCount(folder)}
                         totalCount={folder.total_count}
+                        showTotal={showTotals && folder.special_use !== "drafts"}
                         isGlacier={folder.kind === "glacier"}
                         onSelect={selectFolder}
                       />
@@ -590,6 +603,7 @@ export function AppSidebar() {
                         isActive={folder.id === selectedFolderId}
                         badgeCount={getFolderBadgeCount(folder)}
                         totalCount={folder.total_count}
+                        showTotal={showTotals && folder.special_use !== "drafts"}
                         isGlacier={folder.kind === "glacier"}
                         onSelect={selectFolder}
                       />

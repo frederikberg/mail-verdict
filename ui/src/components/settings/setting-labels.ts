@@ -32,6 +32,7 @@ export const SETTING_LABELS: Record<string, string> = {
   undo_send_seconds: "Undo window after Send (seconds)",
   mark_read_on_file_to_archive_or_junk: "Mark read when filed to Archive or Junk",
   bell_badge_counts_new_mail: "Bell badge counts new mail",
+  show_folder_totals: "Show total message counts",
   notify_wait_seconds: "Wait before notifying (seconds)",
   language: "Language of titles and summaries",
   filter: "First filter (patterns)",
