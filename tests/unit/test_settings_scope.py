@@ -33,7 +33,7 @@ USER_KEYS = {
                  "default_reminder_minutes"},
     "outbox": {"undo_send_seconds"},
     "mail": {"mark_read_on_file_to_archive_or_junk", "bell_badge_counts_new_mail",
-             "notify_wait_seconds", "account_order"},
+             "notify_wait_seconds", "account_order", "show_folder_totals"},
     "orders": {"language", "filter", "auto_close_days", "auto_close_grace_days"},
 }
 

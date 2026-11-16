@@ -186,7 +186,7 @@ export function AgendaList({ onSelectEvent }: AgendaListProps) {
             style={{ height: HEADER_HEIGHT }}
             className="flex items-center gap-2 border-b bg-muted/30 px-3"
           >
-            <span className="text-xs font-medium">{format(row.date, "EEEE, MMM d")}</span>
+            <span className="text-xs font-medium">{format(row.date, "EEEE, d MMM")}</span>
             {isToday(row.date) && (
               <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">
                 Today

@@ -32,6 +32,7 @@ import {
   toWholeDayValue,
   wholeDayIso,
 } from "@/lib/dates";
+import { formatInZone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface DateTimeFieldProps {
@@ -44,9 +45,9 @@ interface DateTimeFieldProps {
    * one, the same rule the event editor's all-day toggle already follows. */
   mode?: "datetime" | "date";
   disabled?: boolean;
-  /** The event's own bound zone, when it has one. Shown as a caption
-   * whenever it differs from the browser's -- never silently converted;
-   * a zone picker is out of scope here. */
+  /** The event's own bound zone, when it has one. Whenever it differs from
+   * the browser's, a caption shows the same instant on that zone's clock;
+   * the field itself stays in the browser's time. */
   tz?: string | null;
   /** Told whenever the field's own typed text does or doesn't currently
    * parse, so the caller can gate Save without re-deriving the same
@@ -392,7 +393,11 @@ export function DateTimeField({
           Not a date{allDay ? "" : " and time"} this understands.
         </p>
       )}
-      {showZoneCaption && <p className="text-xs text-muted-foreground">{tz}</p>}
+      {showZoneCaption && (
+        <p className="text-xs text-muted-foreground" title={tz}>
+          {formatInZone(value, tz)}
+        </p>
+      )}
     </div>
   );
 }

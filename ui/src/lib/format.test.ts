@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   distinctEnvelopeSender,
+  formatCount,
+  formatInZone,
   formatFullDate,
   formatRecipientList,
   formatRelativeAgo,
@@ -112,4 +114,19 @@ test("distinctEnvelopeSender shows an envelope sender only when it differs from 
   assert.equal(distinctEnvelopeSender("bounce@mailer.example", from), "bounce@mailer.example");
   assert.equal(distinctEnvelopeSender("jane@example.com", from), null);
   assert.equal(distinctEnvelopeSender(null, from), null);
+});
+
+test("formatInZone: the event's own clock and city, date only when the day differs", () => {
+  // 20:00Z is still 19 November from UTC through Berlin, and already the
+  // 20th in Tokyo.
+  assert.equal(formatInZone("2026-11-19T20:00:00Z", "America/Los_Angeles"), "12:00 in Los Angeles");
+  assert.equal(formatInZone("2026-11-19T20:00:00Z", "Asia/Tokyo"), "20.11. 05:00 in Tokyo");
+});
+
+test("formatCount: short forms past a thousand", () => {
+  assert.equal(formatCount(30), "30");
+  assert.equal(formatCount(999), "999");
+  assert.equal(formatCount(1000), "1k");
+  assert.equal(formatCount(1240), "1.2k");
+  assert.equal(formatCount(12_400), "12k");
 });

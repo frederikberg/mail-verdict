@@ -29,11 +29,11 @@ const VIEWS: { value: CalendarViewMode; label: string }[] = [
 ];
 
 function titleFor(view: CalendarViewMode, date: Date): string {
-  if (view === "day") return format(date, "EEEE, MMMM d, yyyy");
+  if (view === "day") return format(date, "EEEE, d MMMM yyyy");
   if (view === "week") {
     const start = startOfWeek(date, { weekStartsOn: 1 });
     const end = addDays(start, 6);
-    const range = format(start, "MMM d") + " – " + format(end, "MMM d, yyyy");
+    const range = format(start, "d MMM") + " – " + format(end, "d MMM yyyy");
     return `${range} (Week ${weekNumber(date)})`;
   }
   return format(date, "MMMM yyyy");
