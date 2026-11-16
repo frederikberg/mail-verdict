@@ -148,7 +148,7 @@ function MonthWeekRowImpl({
         <button
           type="button"
           data-testid="week-number"
-          aria-label={`Open week of ${format(weekStart, "MMM d, yyyy")}`}
+          aria-label={`Open week of ${format(weekStart, "d MMM yyyy")}`}
           onClick={() => onSelectWeek(weekStart)}
           style={{ width: WEEK_NUMBER_GUTTER_WIDTH }}
           className="shrink-0 border-r pt-0.5 text-center text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -188,7 +188,7 @@ function MonthWeekRowImpl({
               <div className="flex h-5 items-center gap-1">
                 <button
                   type="button"
-                  aria-label={`Open ${format(day, "EEEE, MMM d, yyyy")}`}
+                  aria-label={`Open ${format(day, "EEEE, d MMM yyyy")}`}
                   onClick={(ev) => {
                     ev.stopPropagation();
                     onSelectDay(day);
@@ -199,7 +199,7 @@ function MonthWeekRowImpl({
                     !isToday(day) && isWeekend(day) && "text-muted-foreground",
                   )}
                 >
-                  {day.getDate() === 1 ? format(day, "MMM d") : day.getDate()}
+                  {day.getDate() === 1 ? format(day, "d MMM") : day.getDate()}
                 </button>
               </div>
 

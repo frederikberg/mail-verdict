@@ -242,6 +242,9 @@ SETTING_DEFAULTS: dict[str, dict[str, Any]] = {
         # last. Ids of accounts that are gone, or not theirs, are ignored
         # on read; an account not listed sorts after the listed ones.
         "account_order": [],
+        # Whether folder and unified-view rows show their total message
+        # count beside the unread one, on the web and in the app.
+        "show_folder_totals": False,
     },
     SettingCategory.ORDERS: {
         # Three model tasks, each with its own provider, server address, model,
@@ -429,6 +432,7 @@ SETTING_SCOPE: dict[str, dict[str, SettingScope]] = {
         "bell_badge_counts_new_mail": "user",
         "notify_wait_seconds": "user",
         "account_order": "user",
+        "show_folder_totals": "user",
     },
     SettingCategory.ORDERS: {
         key: "user" if key in _ORDERS_USER_KEYS else "admin"

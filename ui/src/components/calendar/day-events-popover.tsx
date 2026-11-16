@@ -33,7 +33,7 @@ export function DayEventsPopover({ date, events, onSelectEvent, onClose }: DayEv
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between px-1">
-        <span className="text-sm font-medium">{format(date, "EEEE, MMM d")}</span>
+        <span className="text-sm font-medium">{format(date, "EEEE, d MMM")}</span>
         <Button variant="ghost" size="icon-xs" onClick={onClose}>
           <X className="h-3 w-3" />
         </Button>

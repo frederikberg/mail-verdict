@@ -205,7 +205,7 @@ export function formatContactBirthday(raw: string): string | null {
   const parts = parseContactBirthday(raw);
   if (!parts) return null;
   const date = new Date(parts.year ?? 2000, parts.month - 1, parts.day);
-  return formatDate(date, parts.year !== null ? "MMMM d, yyyy" : "MMMM d");
+  return formatDate(date, parts.year !== null ? "d MMMM yyyy" : "d MMMM");
 }
 
 /** A permissive shape check -- one @ with something on each side, no
@@ -213,4 +213,35 @@ export function formatContactBirthday(raw: string): string | null {
  * word typed and committed by mistake before it reaches the outbox. */
 export function isValidEmail(address: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address);
+}
+
+/** The caption under a timed field whose event is bound to a zone other
+ * than the browser's: the same instant on that zone's own clock, with the
+ * date only when it falls on another day there ("12:00 in Los Angeles",
+ * "20.11. 06:00 in Tokyo"). The field itself always shows the browser's
+ * time, so a bare zone name under it reads as the zone of the time above. */
+export function formatInZone(iso: string, tz: string): string {
+  if (Number.isNaN(new Date(iso).getTime())) return tz;
+  const parts = (zone: string) => {
+    const p = Object.fromEntries(
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: zone, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date(iso)).map((x) => [x.type, x.value]),
+    );
+    return { date: `${p.day}.${p.month}.`, time: `${p.hour}:${p.minute}` };
+  };
+  const there = parts(tz);
+  const here = parts(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const city = (tz.split("/").pop() ?? tz).replace(/_/g, " ");
+  const when = there.date === here.date ? there.time : `${there.date} ${there.time}`;
+  return `${when} in ${city}`;
+}
+
+/** A message count short enough for a sidebar column: 1240 is "1.2k",
+ * 12400 is "12k". */
+export function formatCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `${Math.round(n / 1000)}k`;
 }

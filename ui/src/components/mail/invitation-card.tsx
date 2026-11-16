@@ -86,8 +86,8 @@ export function InvitationCard({ messageId }: InvitationCardProps) {
           <p className="text-sm font-medium">{invitation.summary || "(no title)"}</p>
           <p className="text-xs text-muted-foreground">
             {invitation.all_day
-              ? format(new Date(invitation.dtstart), "EEE, MMM d") + " · All day"
-              : `${format(new Date(invitation.dtstart), "EEE, MMM d · HH:mm")}–${format(new Date(invitation.dtend), "HH:mm")}`}
+              ? format(new Date(invitation.dtstart), "EEE, d MMM") + " · All day"
+              : `${format(new Date(invitation.dtstart), "EEE, d MMM · HH:mm")}–${format(new Date(invitation.dtend), "HH:mm")}`}
           </p>
           {invitation.location && (
             <p className="text-xs text-muted-foreground">{invitation.location}</p>

@@ -303,7 +303,7 @@ class TestContactsUi:
             f"xpath=//h2[normalize-space(text())='{name}']"
             "/ancestor::div[contains(@class,'overflow-y-auto')][1]"
         )
-        expect(detail.get_by_text("September 15", exact=True)).to_be_visible(timeout=10_000)
+        expect(detail.get_by_text("15 September", exact=True)).to_be_visible(timeout=10_000)
         expect(detail.get_by_text("Friend", exact=True)).to_be_visible()
         expect(detail.get_by_text("Work", exact=True)).to_be_visible()
 
@@ -515,7 +515,7 @@ class TestBirthdayCrash:
             f"xpath=//h2[normalize-space(text())='{name}']"
             "/ancestor::div[contains(@class,'overflow-y-auto')][1]"
         )
-        expect(detail.get_by_text("September 15", exact=True)).to_be_visible(timeout=10_000)
+        expect(detail.get_by_text("15 September", exact=True)).to_be_visible(timeout=10_000)
         expect(page.get_by_text("Something went wrong", exact=False)).to_have_count(0)
 
     def test_a_contact_with_no_birthday_at_all_renders(
