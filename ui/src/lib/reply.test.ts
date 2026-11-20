@@ -92,3 +92,38 @@ test("buildReply: reply-all excludes every identity address of the account, not 
   );
   assert.deepEqual(draft.cc, ["carol@example.com"]);
 });
+
+test("buildReply: a reply to a message sent from an own alias goes to its original To", () => {
+  const message = makeMessage({
+    from_addr: "Me <team-alias@example.com>",
+    to_addrs: ["Bob <bob@example.com>"],
+    cc_addrs: ["Carol <carol@example.com>"],
+  });
+  const draft = buildReply(
+    message, ["me@example.com", "team-alias@example.com"], "reply",
+  );
+  assert.deepEqual(draft.to, ["bob@example.com"]);
+  assert.deepEqual(draft.cc, []);
+});
+
+test("buildReply: reply-all to an own sent message keeps To and Cc, minus own addresses", () => {
+  const message = makeMessage({
+    from_addr: "me@example.com",
+    to_addrs: ["Bob <bob@example.com>", "me@example.com"],
+    cc_addrs: ["Carol <carol@example.com>", "team-alias@example.com"],
+  });
+  const draft = buildReply(
+    message, ["me@example.com", "team-alias@example.com"], "reply-all",
+  );
+  assert.deepEqual(draft.to, ["bob@example.com"]);
+  assert.deepEqual(draft.cc, ["carol@example.com"]);
+});
+
+test("buildReply: a message sent only to oneself is answered to its sender", () => {
+  const message = makeMessage({
+    from_addr: "me@example.com",
+    to_addrs: ["me@example.com"],
+  });
+  const draft = buildReply(message, ["me@example.com"], "reply");
+  assert.deepEqual(draft.to, ["me@example.com"]);
+});

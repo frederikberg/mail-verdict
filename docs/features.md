@@ -57,6 +57,8 @@ Everything MailVerdict does, area by area. The [README](../README.md) has the ov
   reply-all, forward and drafts, with attachments. The panel resizes by dragging its top edge or
   expands to fill the window.
 - A reply or forward embeds the original as a collapsible quote, and replies thread correctly.
+- Replying to a message you sent yourself (from any of the account's addresses) goes to the people
+  you sent it to; reply-all adds its Cc, never you.
 - **Sending identity:** chosen for you — whichever address the original arrived at, or the
   account's starred default for a fresh message. It is shown, and changeable, in one From control
   spanning every account, which always names the exact address (`Name <address>`), not just the
