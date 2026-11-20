@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.3.1] - 2026-11-20
+
+### Fixed
+
+- Reply and reply-all on a message you sent yourself go to the people you sent it to, not back to
+  your own address. Mail from anyone else is answered as before.
+
 ## [9.3.0] - 2026-11-16
 
 ### Added
