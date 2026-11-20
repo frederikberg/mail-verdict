@@ -118,35 +118,46 @@ export function buildForward(source: MessageDetail): ForwardDraft {
 }
 
 /** Build the prefilled recipients, subject, threading headers and quote
- * for a reply. `ownAddresses` are left out of a reply-all's Cc: the
- * account's own login address and every identity it sends as, since a
- * reply to a message that reached one of them should not copy the
- * person writing it. */
+ * for a reply. `ownAddresses` are the account's own login address and
+ * every identity it sends as. They are left out of a reply-all's Cc,
+ * since a reply to a message that reached one of them should not copy
+ * the person writing it. A message sent from one of them (a mail in
+ * Sent, or one's own message inside a thread) is answered to whoever it
+ * was sent to, the same rule mcp_reply.py's derive_reply applies; only a
+ * mail addressed to nobody else falls back to its sender. */
 export function buildReply(
   source: MessageDetail,
   ownAddresses: string[],
   mode: "reply" | "reply-all",
 ): ReplyDraft {
+  const own = new Set(ownAddresses.map((a) => extractEmail(a).toLowerCase()));
   // RFC 5322: a reply goes to Reply-To when the message names one,
   // otherwise to From.
   const senderEmail = extractEmail(source.from_addr);
   const replyTo = splitAddressHeader(source.reply_to)
     .map((a) => extractEmail(a))
     .filter(Boolean);
-  const to = dedupeExcluding(
-    replyTo.length > 0 ? replyTo : senderEmail ? [senderEmail] : [],
-    new Set(),
-  );
+  const ownRecipients =
+    senderEmail && own.has(senderEmail.toLowerCase())
+      ? dedupeExcluding(
+          (source.to_addrs ?? []).map((a) => extractEmail(a)),
+          own,
+        )
+      : [];
+  const to =
+    ownRecipients.length > 0
+      ? ownRecipients
+      : dedupeExcluding(
+          replyTo.length > 0 ? replyTo : senderEmail ? [senderEmail] : [],
+          new Set(),
+        );
 
   let cc: string[] = [];
   if (mode === "reply-all") {
     const others = [...(source.to_addrs ?? []), ...(source.cc_addrs ?? [])].map(
       (a) => extractEmail(a),
     );
-    const exclude = new Set([
-      ...ownAddresses.map((a) => extractEmail(a).toLowerCase()),
-      ...to.map((a) => a.toLowerCase()),
-    ]);
+    const exclude = new Set([...own, ...to.map((a) => a.toLowerCase())]);
     cc = dedupeExcluding(others, exclude);
   }
 
