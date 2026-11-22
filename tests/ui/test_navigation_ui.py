@@ -172,7 +172,8 @@ class TestNavigationShellUi:
     ) -> None:
         """The header search field (app-header.tsx): `/` focuses it from
         anywhere, and Enter jumps to the full search page with the query
-        already applied."""
+        already applied -- and, pressed again on that page, replaces the
+        query its own field holds."""
         page.goto(f"{app_server}/")
         # A fresh load auto-selects whichever account sorts first by name
         # across the shared test database, not necessarily ui_account --
@@ -195,6 +196,15 @@ class TestNavigationShellUi:
         expect(page.get_by_placeholder("Search messages…")).to_have_value(
             query, timeout=10_000,
         )
+
+        second = f"header-search-{uuid.uuid4().hex[:8]}"
+        search_input.fill(second)
+        search_input.press("Enter")
+
+        expect(page.get_by_placeholder("Search messages…")).to_have_value(
+            second, timeout=10_000,
+        )
+        expect(page).to_have_url(re.compile(rf"/search\?q={second}"))
 
     def test_question_mark_opens_the_shortcuts_overlay(
         self, page: Page, app_server: str, ui_account: dict[str, Any],
