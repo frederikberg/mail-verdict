@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.3.2] - 2026-11-22
+
 ### Fixed
 
 - Pressing Enter in the header's search field while already on the search page replaces the
