@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Pressing Enter in the header's search field while already on the search page replaces the
+  page's query, instead of leaving the search below it unchanged.
+
 ## [9.3.1] - 2026-11-20
 
 ### Fixed

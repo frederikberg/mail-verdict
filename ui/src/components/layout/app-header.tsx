@@ -7,11 +7,14 @@
  * instead: its shortcut (`/` by default) focuses it from anywhere, and Enter jumps to the full
  * search page with the query already applied, which stays the place for
  * scope, fields and semantic search rather than duplicating any of that
- * here.
+ * here. Enter writes the search page's own query, so on that page it
+ * replaces what the page's field holds -- the page reads `?q=` only on
+ * mount, and a same-route navigation does not remount it.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useSetAtom } from "jotai";
 import { Search } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
@@ -20,9 +23,12 @@ import { ConnectionIndicator } from "@/components/layout/connection-indicator";
 import { isEditableElement } from "@/lib/utils";
 import { useShortcutBindings } from "@/lib/shortcut-bindings";
 import { matchAction } from "@/lib/shortcuts";
+import { searchQueryAtom } from "@/lib/search-prefs";
 
 export function AppHeader() {
   const router = useRouter();
+  const pathname = usePathname();
+  const setSearchQuery = useSetAtom(searchQueryAtom);
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const bindings = useShortcutBindings();
@@ -42,7 +48,13 @@ export function AppHeader() {
   const submit = () => {
     const q = value.trim();
     if (!q) return;
-    router.push(`/search?q=${encodeURIComponent(q)}`);
+    const url = `/search?q=${encodeURIComponent(q)}`;
+    setSearchQuery(q);
+    // Already on the page: the atom carries the query, and the URL only has
+    // to stay in step for a reload -- a router push there would refetch the
+    // route's payload for nothing.
+    if (pathname === "/search") window.history.replaceState(null, "", url);
+    else router.push(url);
   };
 
   return (
