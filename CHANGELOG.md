@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.4.0] - 2026-11-23
+
 ### Added
 
 - An optional fallback embeddings endpoint: `semantic.fallback_base_url` and `semantic.fallback_model`
