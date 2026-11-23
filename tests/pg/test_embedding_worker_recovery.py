@@ -246,8 +246,8 @@ async def test_suspended_worker_loop_recovers_once_it_wins_a_probe(
 
     import mail_verdict.embeddings.worker as worker_module
 
-    original_resolve = worker_module.resolve_embedding_provider
-    worker_module.resolve_embedding_provider = lambda *a, **k: FakeEmbeddingProvider()  # type: ignore[assignment]
+    original_resolve = worker_module.resolve_embedding_provider_for_model
+    worker_module.resolve_embedding_provider_for_model = lambda *a, **k: FakeEmbeddingProvider()  # type: ignore[assignment]
 
     stop_event = asyncio.Event()
     loop_task = asyncio.create_task(
@@ -281,7 +281,7 @@ async def test_suspended_worker_loop_recovers_once_it_wins_a_probe(
     finally:
         stop_event.set()
         await asyncio.wait_for(loop_task, timeout=5.0)
-        worker_module.resolve_embedding_provider = original_resolve
+        worker_module.resolve_embedding_provider_for_model = original_resolve
 
     status = await circuit.status()
     assert status.state == CircuitState.CLOSED
@@ -319,8 +319,8 @@ async def test_a_persistently_retryable_failure_reaches_a_dead_letter(
 
     import mail_verdict.embeddings.worker as worker_module
 
-    original_resolve = worker_module.resolve_embedding_provider
-    worker_module.resolve_embedding_provider = lambda *a, **k: _AlwaysConnectionError()  # type: ignore[assignment]
+    original_resolve = worker_module.resolve_embedding_provider_for_model
+    worker_module.resolve_embedding_provider_for_model = lambda *a, **k: _AlwaysConnectionError()  # type: ignore[assignment]
     try:
         # max_attempts=2: the first claim (attempts=1) is still under the
         # cap and requeues; the second (attempts=2) reaches it and fails.
@@ -350,7 +350,7 @@ async def test_a_persistently_retryable_failure_reaches_a_dead_letter(
             db=migrated_db,
         )
     finally:
-        worker_module.resolve_embedding_provider = original_resolve
+        worker_module.resolve_embedding_provider_for_model = original_resolve
 
     async with migrated_db.session() as session:
         final = (
@@ -397,9 +397,9 @@ async def test_a_slow_item_is_never_reclaimed_out_from_under_a_still_running_wor
     import mail_verdict.embeddings.worker as worker_module
 
     provider = _SlowFakeProvider(delay_seconds=0.6)
-    original_resolve = worker_module.resolve_embedding_provider
+    original_resolve = worker_module.resolve_embedding_provider_for_model
     original_lease = worker_module.LEASE_SECONDS
-    worker_module.resolve_embedding_provider = lambda *a, **k: provider  # type: ignore[assignment]
+    worker_module.resolve_embedding_provider_for_model = lambda *a, **k: provider  # type: ignore[assignment]
     # A lease this short against a 0.6s-per-item provider is what puts
     # rows still waiting their turn on an already-expired lease --
     # matches the review's own numbers (per-item time exceeding
@@ -438,7 +438,7 @@ async def test_a_slow_item_is_never_reclaimed_out_from_under_a_still_running_wor
     finally:
         stop_event.set()
         await asyncio.wait_for(loop_task, timeout=5.0)
-        worker_module.resolve_embedding_provider = original_resolve
+        worker_module.resolve_embedding_provider_for_model = original_resolve
         worker_module.LEASE_SECONDS = original_lease
 
     # Every message embedded exactly once -- a reclaimed-and-re-run row
@@ -493,8 +493,8 @@ async def test_a_rate_limit_backs_off_by_the_providers_own_retry_after(
     row = await _claim_specific(migrated_db, next(iter(pending_ids)), worker_id="w1")
     import mail_verdict.embeddings.worker as worker_module
 
-    original_resolve = worker_module.resolve_embedding_provider
-    worker_module.resolve_embedding_provider = (  # type: ignore[assignment]
+    original_resolve = worker_module.resolve_embedding_provider_for_model
+    worker_module.resolve_embedding_provider_for_model = (  # type: ignore[assignment]
         lambda *a, **k: _AlwaysRateLimitedWithHeader()
     )
     try:
@@ -504,7 +504,7 @@ async def test_a_rate_limit_backs_off_by_the_providers_own_retry_after(
             db=migrated_db,
         )
     finally:
-        worker_module.resolve_embedding_provider = original_resolve
+        worker_module.resolve_embedding_provider_for_model = original_resolve
 
     async with migrated_db.session() as session:
         mid = (
