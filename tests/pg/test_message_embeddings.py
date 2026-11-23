@@ -447,8 +447,8 @@ async def test_worker_embeds_a_truncated_message_as_envelope_only(
 
     import mail_verdict.embeddings.worker as worker_module
 
-    original_resolve = worker_module.resolve_embedding_provider
-    worker_module.resolve_embedding_provider = lambda *a, **k: _FakeProvider()  # type: ignore
+    original_resolve = worker_module.resolve_embedding_provider_for_model
+    worker_module.resolve_embedding_provider_for_model = lambda *a, **k: _FakeProvider()  # type: ignore
     try:
         await _handle_one(
             claimed[0], "w1", work_queue, embedding_repo, message_repo,
@@ -456,7 +456,7 @@ async def test_worker_embeds_a_truncated_message_as_envelope_only(
             circuit=_NullCircuit(), db=migrated_db,  # type: ignore[arg-type]
         )
     finally:
-        worker_module.resolve_embedding_provider = original_resolve
+        worker_module.resolve_embedding_provider_for_model = original_resolve
 
     assert "should be ignored" not in provider_calls[0]
 

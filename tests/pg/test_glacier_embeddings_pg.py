@@ -346,8 +346,8 @@ async def test_worker_embeds_a_glaciered_message_from_its_own_stored_fields(
 
     import mail_verdict.embeddings.worker as worker_module
 
-    original_resolve = worker_module.resolve_embedding_provider
-    worker_module.resolve_embedding_provider = lambda *a, **k: FakeEmbeddingProvider()  # type: ignore[assignment]
+    original_resolve = worker_module.resolve_embedding_provider_for_model
+    worker_module.resolve_embedding_provider_for_model = lambda *a, **k: FakeEmbeddingProvider()  # type: ignore[assignment]
     try:
         await _handle_one(
             claimed, "w1", work_queue, embedding_repo, message_repo,
@@ -355,7 +355,7 @@ async def test_worker_embeds_a_glaciered_message_from_its_own_stored_fields(
             circuit=_NullCircuit(), db=migrated_db,  # type: ignore[arg-type]
         )
     finally:
-        worker_module.resolve_embedding_provider = original_resolve
+        worker_module.resolve_embedding_provider_for_model = original_resolve
 
     async with migrated_db.session() as session:
         final = (
