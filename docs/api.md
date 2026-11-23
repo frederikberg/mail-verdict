@@ -154,7 +154,8 @@ circuit breaker of every AI task that has called a provider (`<provider>:<task>`
 and the token usage export to Elasticsearch — its key, the last delivery, the last request's error
 while it fails, and how many usage rows wait to be sent. The export's key is written like a
 provider key, as `elastic_usage_api_key` (an Elasticsearch encoded API key), and appears only here,
-never in a category's own fields.
+never in a category's own fields. The key of the optional second embeddings endpoint
+(`semantic.fallback_base_url`) is written the same way, as `embedding_fallback_api_key`.
 
 `settings/defaults.py` documents every other setting category (`ai`, `assistant`, `orders`, `retry`,
 `pipeline`, `semantic`) and its default with a comment — that file is the authoritative list, not repeated

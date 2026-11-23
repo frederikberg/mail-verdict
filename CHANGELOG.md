@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- An optional fallback embeddings endpoint: `semantic.fallback_base_url` and `semantic.fallback_model`
+  name a second OpenAI-compatible server serving the same model, with its own write-only key
+  (`embedding_fallback_api_key`, or `EMBEDDING_FALLBACK_API_KEY`). It answers when the configured
+  provider fails, for stored messages and for search, and is off while any of the three is unset.
+
 ## [9.3.2] - 2026-11-22
 
 ### Fixed

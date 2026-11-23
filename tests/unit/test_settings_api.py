@@ -243,6 +243,19 @@ class TestUpdateSettings:
         assert "elastic_usage" not in fetched
 
 
+    def test_embedding_fallback_key_is_stored_and_kept_out_of_every_category(
+        self, client: TestClient, cred_repo: MagicMock,
+    ) -> None:
+        """The second embeddings endpoint's key is write-only like the others."""
+        resp = client.put(
+            "/settings/semantic", json={"data": {"embedding_fallback_api_key": "fb-secret"}},
+        )
+        assert resp.status_code == 200
+        assert cred_repo._stored["embedding_fallback"] == "fb-secret"
+        assert "fb-secret" not in resp.text
+        assert "embedding_fallback" not in client.get("/settings/semantic").text
+
+
 class TestSemanticSettings:
     """Semantic category: provider validation and the active-model freeze
     that keeps search on the old vector space during a re-embed."""

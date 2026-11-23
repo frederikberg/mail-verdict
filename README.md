@@ -154,6 +154,14 @@ theirs alone.
   it has no embedding model), or any OpenAI-compatible server by its own address, key and model
   name; a custom server's address is set on the task that uses it (`ai.base_url`,
   `semantic.base_url`, `orders.decide_base_url`, ...).
+- **Embedding fallback (optional):** `semantic.fallback_base_url` and `semantic.fallback_model` name a
+  second OpenAI-compatible embeddings endpoint serving the same model as `semantic.model` under its
+  own name for it, with its own key (`embedding_fallback_api_key`). A failing provider (rate limit,
+  outage, rejected key, spent allowance) is answered by that endpoint instead, for stored messages
+  and for search, and what it returns is stored as the primary model's. Nothing is tried while the
+  address, the model name or the key is unset. It must serve the same weights at the same
+  precision: vectors from a different model do not belong in one search space (change `model` for
+  that, which re-embeds the mailbox).
 - A key is stored once per provider and shared by every task that names it, so mail that must stay
   private can sit on one provider while order analysis uses another. The Models page states
   beside each task which mail it reads; [docs/features.md](docs/features.md#privacy) has the
@@ -171,7 +179,7 @@ fallback for a deployment that would rather not put a key in the database:
 
 | Variable | Purpose |
 |----------|---------|
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `CUSTOM_AI_API_KEY` / `ELASTIC_USAGE_API_KEY` | Fallback provider and usage export keys, used only when nothing is stored via the Settings API |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `CUSTOM_AI_API_KEY` / `EMBEDDING_FALLBACK_API_KEY` / `ELASTIC_USAGE_API_KEY` | Fallback provider, embedding fallback and usage export keys, used only when nothing is stored via the Settings API |
 | `MAIL_VERDICT_DATABASE_URL` | PostgreSQL connection, shared with PostIMAP |
 | `POSTGRES_PASSWORD` | Database password, used by compose |
 | `ENCRYPTION_KEY` | Encrypts provider keys stored via the Settings API, PostIMAP's own credential-at-rest encryption, and this server's Web Push signing key (generated on first use, never provisioned) — one key shared by all three. Optional; without it, provider keys can only come from the env vars above, and push notifications are unavailable |

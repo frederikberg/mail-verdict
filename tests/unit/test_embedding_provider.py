@@ -6,15 +6,21 @@ layer, which needs a real key.
 
 from __future__ import annotations
 
+import httpx
+import openai
 import pytest
 
+from mail_verdict.core.errors import ProviderUnavailableError
 from mail_verdict.database.models import EMBEDDING_DIMENSIONS
 from mail_verdict.embeddings.provider import (
+    EmbeddingProvider,
     FakeEmbeddingProvider,
+    FallbackEmbeddingProvider,
     OpenAIEmbeddingProvider,
     resolve_active_embedding_model,
     resolve_active_embedding_provider,
     resolve_embedding_provider,
+    resolve_embedding_provider_for_model,
 )
 
 
@@ -120,3 +126,147 @@ class TestResolveActiveEmbeddingProvider:
             "active_provider": "openai", "active_base_url": None,
         }
         assert resolve_active_embedding_provider(settings) == ("openai", None)
+
+
+def _status_error(cls: type[openai.APIStatusError], status: int) -> openai.APIStatusError:
+    request = httpx.Request("POST", "https://example.test/v1/embeddings")
+    response = httpx.Response(status, request=request)
+    return cls("boom", response=response, body=None)  # type: ignore[arg-type, unused-ignore]
+
+
+class _Scripted(EmbeddingProvider):
+    """Answers with a vector or raises, and remembers what it was asked."""
+
+    def __init__(self, *, error: Exception | None = None, width: int = EMBEDDING_DIMENSIONS):
+        self.error = error
+        self.width = width
+        self.calls: list[tuple[list[str], str]] = []
+
+    async def embed_batch(
+        self, texts: list[str], *, model: str, timeout: float | None = None,
+    ) -> list[list[float]]:
+        self.calls.append((texts, model))
+        if self.error is not None:
+            raise self.error
+        return [[0.5] * self.width for _ in texts]
+
+
+class TestFallbackEmbeddingProvider:
+    @pytest.mark.asyncio
+    async def test_primary_answer_is_used_without_touching_the_fallback(self) -> None:
+        primary, fallback = _Scripted(), _Scripted()
+        provider = FallbackEmbeddingProvider(primary, fallback, fallback_model="other-name")
+        await provider.embed_batch(["a"], model="m")
+        assert primary.calls == [(["a"], "m")]
+        assert fallback.calls == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "error",
+        [
+            _status_error(openai.RateLimitError, 429),
+            _status_error(openai.InternalServerError, 503),
+            _status_error(openai.AuthenticationError, 401),
+            ProviderUnavailableError("No custom API key configured"),
+        ],
+    )
+    async def test_provider_failure_goes_to_the_fallback_under_its_own_model_name(
+        self, error: Exception,
+    ) -> None:
+        primary, fallback = _Scripted(error=error), _Scripted()
+        provider = FallbackEmbeddingProvider(primary, fallback, fallback_model="other-name")
+        vectors = await provider.embed_batch(["a", "b"], model="m", timeout=3.0)
+        assert len(vectors) == 2
+        assert fallback.calls == [(["a", "b"], "other-name")]
+
+    @pytest.mark.asyncio
+    async def test_a_request_the_primary_rejected_as_malformed_is_not_retried_elsewhere(
+        self,
+    ) -> None:
+        error = _status_error(openai.BadRequestError, 400)
+        primary, fallback = _Scripted(error=error), _Scripted()
+        provider = FallbackEmbeddingProvider(primary, fallback, fallback_model="other-name")
+        with pytest.raises(openai.BadRequestError):
+            await provider.embed_batch(["a"], model="m")
+        assert fallback.calls == []
+
+    @pytest.mark.asyncio
+    async def test_a_bug_in_this_process_is_not_an_outage(self) -> None:
+        primary, fallback = _Scripted(error=KeyError("x")), _Scripted()
+        provider = FallbackEmbeddingProvider(primary, fallback, fallback_model="other-name")
+        with pytest.raises(KeyError):
+            await provider.embed_batch(["a"], model="m")
+        assert fallback.calls == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "fallback",
+        [
+            _Scripted(error=ProviderUnavailableError("no key")),
+            _Scripted(error=_status_error(openai.InternalServerError, 500)),
+            _Scripted(width=EMBEDDING_DIMENSIONS + 1),
+        ],
+    )
+    async def test_when_the_fallback_cannot_answer_the_primary_error_surfaces(
+        self, fallback: _Scripted,
+    ) -> None:
+        error = _status_error(openai.RateLimitError, 429)
+        provider = FallbackEmbeddingProvider(
+            _Scripted(error=error), fallback, fallback_model="other-name",
+        )
+        with pytest.raises(openai.RateLimitError):
+            await provider.embed_batch(["a"], model="m")
+
+
+class _StoredKeys:
+    """Credential repository stand-in holding only the keys it is given."""
+
+    def __init__(self, **keys: str) -> None:
+        self._keys = keys
+
+    async def resolve_key(self, provider: str) -> str | None:
+        return self._keys.get(provider)
+
+
+class TestFallbackResolution:
+    SETTINGS = {
+        "provider": "custom", "base_url": "https://primary.test/v1", "model": "Qwen/Q",
+        "fallback_base_url": "https://fallback.test/v1", "fallback_model": "Q",
+    }
+
+    def _resolve(self, settings: dict, **overrides: object) -> EmbeddingProvider:
+        args = {
+            "provider_name": "custom", "base_url": "https://primary.test/v1", "model": "Qwen/Q",
+            **overrides,
+        }
+        return resolve_embedding_provider_for_model(
+            settings, None, **args,  # type: ignore[arg-type]
+        )
+
+    def test_a_fallback_is_attached_when_configured(self) -> None:
+        assert isinstance(self._resolve(self.SETTINGS), FallbackEmbeddingProvider)
+
+    @pytest.mark.parametrize(
+        "unset", [{"fallback_base_url": None}, {"fallback_model": None}, {}],
+    )
+    def test_unconfigured_means_no_fallback(self, unset: dict) -> None:
+        settings = {k: v for k, v in self.SETTINGS.items() if not k.startswith("fallback_")}
+        settings.update(unset)
+        assert isinstance(self._resolve(settings), OpenAIEmbeddingProvider)
+
+    @pytest.mark.parametrize(
+        "other",
+        [{"model": "previous-model"}, {"base_url": "https://previous.test/v1"}],
+    )
+    def test_a_call_for_another_vector_space_gets_no_fallback(self, other: dict) -> None:
+        assert isinstance(self._resolve(self.SETTINGS, **other), OpenAIEmbeddingProvider)
+
+    @pytest.mark.asyncio
+    async def test_the_fallback_endpoint_reads_its_own_key_and_never_the_primarys(self) -> None:
+        provider = OpenAIEmbeddingProvider(
+            _StoredKeys(custom="primary-key"),  # type: ignore[arg-type]
+            provider="custom", base_url="https://fallback.test/v1",
+            credential="embedding_fallback",
+        )
+        with pytest.raises(ProviderUnavailableError, match="embedding_fallback"):
+            await provider.embed_batch(["a"], model="Q")

@@ -110,8 +110,9 @@ def validate_semantic_settings(effective: dict[str, Any]) -> None:
             update already merged onto the existing values
 
     Raises:
-        ValueError: If the provider is unknown, or it is "custom" with no
-            base_url
+        ValueError: If the provider is unknown, it is "custom" with no
+            base_url, or only one of the fallback endpoint's address and
+            model is set
     """
     provider = str(effective.get("provider", "")).lower()
     if provider not in SEMANTIC_KNOWN_PROVIDERS:
@@ -121,6 +122,10 @@ def validate_semantic_settings(effective: dict[str, Any]) -> None:
         )
     if provider == "custom" and not effective.get("base_url"):
         raise ValueError("semantic.base_url is required when semantic.provider is 'custom'")
+    if bool(effective.get("fallback_base_url")) != bool(effective.get("fallback_model")):
+        raise ValueError(
+            "semantic.fallback_base_url and semantic.fallback_model are set together or not at all"
+        )
     instructions = effective.get("query_instructions")
     if instructions is not None and not (
         isinstance(instructions, dict)
