@@ -14,7 +14,8 @@ is one account, reached at that category's own base_url.
 
 The same store holds the key of the one service that is not an AI
 provider: `elastic_usage`, the Elasticsearch API key the token usage
-export (usage/export.py) sends with.
+export (usage/export.py) sends with, and `embedding_fallback`, the key of
+the optional second embeddings endpoint (semantic.fallback_base_url).
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ PROVIDER_ENV_VARS: dict[str, str] = {
 CREDENTIAL_ENV_VARS: dict[str, str] = {
     **PROVIDER_ENV_VARS,
     "elastic_usage": "ELASTIC_USAGE_API_KEY",
+    "embedding_fallback": "EMBEDDING_FALLBACK_API_KEY",
 }
 
 

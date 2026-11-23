@@ -1211,6 +1211,16 @@ that protects a setting rather than being one itself. An environment variable (`
 out of the database entirely — read fresh on every call, so switching from the env var to a stored
 key, or rotating a stored one, takes effect on the next request with no restart.
 
+The `embedding_fallback` credential (`EMBEDDING_FALLBACK_API_KEY`) belongs to no provider name: it
+is the key of the second embeddings endpoint `semantic.fallback_base_url`/`fallback_model` name.
+`embeddings/provider.py`'s `FallbackEmbeddingProvider` tries the configured provider first and, when
+it fails provider-side (not for a request rejected as malformed), the second endpoint with the
+model's name there; the caller files the vectors under the model it asked for, so the endpoint must
+serve the same weights. It is attached only to calls for the live model and endpoint, never to a
+re-embed target or a previous model's query mid-migration. With the address, model name or key
+unset, or a fallback that fails too, the primary's own error propagates and queue retry, the
+circuit breaker and search's 503 behave as without one.
+
 ## Access
 
 ### Who is calling

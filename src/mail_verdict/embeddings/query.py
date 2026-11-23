@@ -36,7 +36,7 @@ from mail_verdict.database.connection import get_db_connection
 from mail_verdict.embeddings.provider import (
     resolve_active_embedding_model,
     resolve_active_embedding_provider,
-    resolve_embedding_provider,
+    resolve_embedding_provider_for_model,
 )
 from mail_verdict.settings.credentials import get_provider_credential_repo
 from mail_verdict.settings.service import get_settings_service
@@ -141,8 +141,9 @@ async def embed_search_query(text: str) -> tuple[str, list[float]]:
     provider_name, base_url = resolve_active_embedding_provider(settings)
     search_config = get_config().search
     try:
-        provider = resolve_embedding_provider(
-            provider_name, get_provider_credential_repo(), base_url=base_url,
+        provider = resolve_embedding_provider_for_model(
+            settings, get_provider_credential_repo(),
+            provider_name=provider_name, base_url=base_url, model=model,
             usage=UsageRecorder(get_db_connection(), QUERY_EMBEDDING_PURPOSE),
         )
     except ValueError as exc:

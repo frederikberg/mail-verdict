@@ -186,6 +186,16 @@ SETTING_DEFAULTS: dict[str, dict[str, Any]] = {
                 "Given a search query, retrieve the emails that are relevant to it",
         },
         "active_base_url": None,
+        # An optional second OpenAI-compatible embeddings endpoint serving
+        # the SAME model as `model`, tried when the first provider fails
+        # (embeddings/provider.py's FallbackEmbeddingProvider). Off while
+        # fallback_base_url is None, and off while no `embedding_fallback`
+        # key is stored. fallback_model is the name that endpoint knows the
+        # model under. Vectors it returns are stored as `model`'s, so the
+        # endpoint must serve the same weights; a different model belongs in
+        # `model`, which re-embeds the mailbox.
+        "fallback_base_url": None,
+        "fallback_model": None,
     },
     SettingCategory.CALENDAR: {
         # A click on empty grid space creates an event this long; a drag

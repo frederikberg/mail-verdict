@@ -30,7 +30,7 @@ from mail_verdict.database.repository import MessageRepository
 from mail_verdict.embeddings.content import build_embedding_input
 from mail_verdict.embeddings.provider import (
     resolve_active_embedding_model,
-    resolve_embedding_provider,
+    resolve_embedding_provider_for_model,
 )
 from mail_verdict.embeddings.repository import EmbeddingRepository
 from mail_verdict.glacier.rows import get_glacier_message_by_key
@@ -407,8 +407,8 @@ async def _handle_one(
     )
 
     try:
-        provider = resolve_embedding_provider(
-            provider_name, cred_repo, base_url=base_url,
+        provider = resolve_embedding_provider_for_model(
+            settings, cred_repo, provider_name=provider_name, base_url=base_url, model=model,
             usage=UsageRecorder(db, EMBEDDING_PURPOSE),
         )
         vectors = await provider.embed_batch([embedding_input.text], model=model)

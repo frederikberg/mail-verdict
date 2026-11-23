@@ -141,3 +141,13 @@ class TestAssistantValidation:
     def test_token_budget_is_bounded(self) -> None:
         with pytest.raises(ValueError, match="assistant.max_tokens"):
             validate_assistant_settings({"provider": "openai", "max_tokens": 100})
+
+
+def test_semantic_fallback_needs_both_its_address_and_its_model() -> None:
+    validate_semantic_settings({"provider": "openai"})
+    validate_semantic_settings(
+        {"provider": "openai", "fallback_base_url": "https://f.test/v1", "fallback_model": "m"},
+    )
+    for half in ({"fallback_base_url": "https://f.test/v1"}, {"fallback_model": "m"}):
+        with pytest.raises(ValueError, match="fallback"):
+            validate_semantic_settings({"provider": "openai", **half})
