@@ -41,6 +41,15 @@ test("a fully loaded folder stays fully loaded", () => {
   assert.equal(merged.hasMore, false);
 });
 
+test("a row coming back below the end of a fully loaded folder is shown", () => {
+  // Undoing the archive of a folder's oldest row.
+  const current = [row(1), row(2)];
+  const fresh = [row(1), row(2), row(3)];
+  const merged = mergeRefreshedWindow(current, fresh, false, false);
+  assert.deepEqual(ids(merged.rows), ids(fresh));
+  assert.equal(merged.hasMore, false);
+});
+
 test("rows deeper than one refresh reaches are kept below it", () => {
   const current = [row(1), row(2), row(3), row(4), row(5)];
   const fresh = [row(0), row(1), row(2)];

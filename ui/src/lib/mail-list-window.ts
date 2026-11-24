@@ -72,7 +72,8 @@ function sitsAbove(a: WindowRow, b: WindowRow): boolean {
  * The result covers the same stretch of the folder the reader had loaded
  * and no more: rows the fresh read found below the old last row are left
  * for ordinary paging, so a refresh never grows the list underneath the
- * reader. Rows the fresh read did not reach -- only possible once the
+ * reader -- unless the loaded window already reached the folder's end, in
+ * which case the fresh read is taken whole. Rows the fresh read did not reach -- only possible once the
  * window is deeper than a single refresh reads -- are kept as they were.
  *
  * @param current rows currently in the cache, newest first
@@ -106,6 +107,11 @@ export function mergeRefreshedWindow<T extends WindowRow>(
     preserved.length === 0
       ? fresh
       : [...fresh, ...preserved].sort((a, b) => (sitsAbove(a, b) ? -1 : sitsAbove(b, a) ? 1 : 0));
+
+  // Both reads reach the folder's end: the fresh read is the whole folder,
+  // a row returning below the old last one (an undone archive of the
+  // bottom row) included -- there is nothing to page for.
+  if (!freshHasMore && !currentHasMore) return { rows: effectiveFresh, hasMore: false };
 
   const oldLast = current[current.length - 1];
   const freshLast = effectiveFresh[effectiveFresh.length - 1];

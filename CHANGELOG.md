@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.4.1] - 2026-11-24
+
+### Fixed
+
+- Undoing the archive, trash or move of the last message in a list shows it again at once,
+  instead of only after a reload: a list refresh that reaches the end of the folder keeps every
+  row it read.
+- A mail list too short to scroll loads its next page by itself, instead of stopping at the rows
+  it had until the reader reloads.
+
 ## [9.4.0] - 2026-11-23
 
 ### Added
