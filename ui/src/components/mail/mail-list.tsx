@@ -554,6 +554,15 @@ export function MailList() {
     ],
   );
 
+  // A list too short to scroll never fires the scroll handler, so rows left
+  // for paging -- below a refresh's window, after rows above them left --
+  // would never load: check once whenever the rows or the paging state change.
+  useEffect(() => {
+    // A list not measured yet reads as empty and would page needlessly.
+    const handle = vlistRef.current;
+    if (handle && handle.viewportSize > 0) handleScroll(handle.scrollOffset);
+  }, [allMails.length, handleScroll]);
+
   // Grouped by conversation, a row counts every unread message in its
   // thread (isRowUnread), so reading it -- opening it, or its own "Mark as
   // read" -- has to clear all of them, not only the newest message the row
