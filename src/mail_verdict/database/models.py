@@ -8,7 +8,7 @@ PostIMAP-owned tables: accounts, folders, messages, attachments, sync_state,
   consumer contract -- see postimap/contract.py for the version this
   projection is built against)
 
-MailVerdict-owned tables: users, user_identities, sign_ins, account_owners,
+MailVerdict-owned tables: users, user_identities, access_key_events, sign_ins, account_owners,
   dav_account_owners, user_settings, verdicts, mail_tags, settings, image_exceptions,
   account_prefs, folder_prefs, queue_state, circuit_breakers, message_embeddings,
   identities, calendar_prefs, calendar_intake, calendar_replies,
@@ -787,17 +787,72 @@ class User(Base):
 
 
 class UserIdentity(Base):
-    """One token subject (`sub` claim) and the user it signs in as."""
+    """One token subject (`sub` claim), the user it signs in as, and what it
+    may do there.
+
+    `access` is `full` (everything its user may do) or `scoped` (exactly
+    `scopes`, see auth/grants.py); the two write limits narrow where a scoped
+    subject may write -- None means every collection. `label` is the name an
+    access key is listed under.
+    """
 
     __tablename__ = "user_identities"
 
     subject: Mapped[str] = mapped_column(Text, primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access: Mapped[str] = mapped_column(Text, nullable=False, default="full", server_default="full")
+    scopes: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}",
+    )
+    calendar_write_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(Uuid), nullable=True,
+    )
+    addressbook_write_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(Uuid), nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now(),
     )
 
-    __table_args__ = (Index("ix_user_identities_user_id", "user_id"),)
+    __table_args__ = (
+        CheckConstraint("access IN ('full', 'scoped')", name="ck_user_identities_access"),
+        CheckConstraint(
+            "access = 'scoped' OR (scopes = '{}' AND calendar_write_ids IS NULL "
+            "AND addressbook_write_ids IS NULL)",
+            name="ck_user_identities_full_has_no_grant",
+        ),
+        Index("ix_user_identities_user_id", "user_id"),
+    )
+
+
+class AccessKeyEvent(Base):
+    """One entry of an access key's audit trail: it was created, changed,
+    revoked, or refused something. `subject` names no foreign key, so the
+    history of a removed key stays; the row goes with its user."""
+
+    __tablename__ = "access_key_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    subject: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    detail: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}",
+    )
+    at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('created', 'changed', 'revoked', 'refused')",
+            name="ck_access_key_events_kind",
+        ),
+        Index("ix_access_key_events_subject_at", "subject", "at"),
+        Index("ix_access_key_events_user_id", "user_id"),
+    )
 
 
 class SignIn(Base):

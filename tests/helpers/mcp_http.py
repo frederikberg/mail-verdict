@@ -56,6 +56,13 @@ class McpHttpSession:
         )
         return _json_rpc_message(response.status_code, response.headers, response.text)
 
+    def list_tools(self, headers: dict[str, str]) -> dict[str, Any]:
+        """The JSON-RPC result of one tools/list, sent with `headers`."""
+        response = self._post(
+            {"jsonrpc": "2.0", "id": self._take_id(), "method": "tools/list"}, headers,
+        )
+        return _json_rpc_message(response.status_code, response.headers, response.text)
+
     def _take_id(self) -> int:
         self._next_id += 1
         return self._next_id

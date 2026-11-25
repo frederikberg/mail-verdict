@@ -8,6 +8,7 @@ the caller of the request that carried the call.
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import asynccontextmanager
@@ -21,6 +22,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 from starlette.testclient import TestClient
 
+from mail_verdict.auth.grants import Grant
+from mail_verdict.auth.mcp_gate import ScopedKeyMiddleware
 from mail_verdict.auth.middleware import AuthMiddleware, requires_token
 from mail_verdict.auth.principal import (
     PrincipalResolver,
@@ -31,7 +34,7 @@ from mail_verdict.auth.tokens import InvalidToken
 from tests.helpers.mcp_http import McpHttpSession
 from tests.helpers.sign_ins import InMemorySignInStore, registry
 
-ALICE, BOB, CAROL = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+ALICE, BOB, CAROL, KEY_OWNER = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 
 
 class _Verifier:
@@ -41,7 +44,7 @@ class _Verifier:
     async def verify(self, token: str) -> Mapping[str, Any]:
         if token == "alice-phone":
             return {"sub": "alice", "azp": "native-app", "jti": "V2_1-at_1", "iat": 0}
-        if token not in {"alice", "bob", "carol"}:
+        if token not in {"alice", "bob", "carol", "calendar-key", "keyless-key"}:
             raise InvalidToken()
         return {"sub": token, "iat": 0}
 
@@ -51,6 +54,14 @@ class _Directory:
         "alice": _DirectoryEntry(user_id=ALICE, role="user", disabled=False),
         "bob": _DirectoryEntry(user_id=BOB, role="user", disabled=False),
         "carol": _DirectoryEntry(user_id=CAROL, role="user", disabled=True),
+        # An access key of an admin user: the grant, not the role, decides.
+        "calendar-key": _DirectoryEntry(
+            user_id=KEY_OWNER, role="admin", disabled=False,
+            grant=Grant(frozenset({"calendar:read"})),
+        ),
+        "keyless-key": _DirectoryEntry(
+            user_id=KEY_OWNER, role="admin", disabled=False, grant=Grant(frozenset()),
+        ),
     }
 
     async def find(self, subject: str) -> _DirectoryEntry | None:
@@ -76,12 +87,18 @@ def store() -> InMemorySignInStore:
 @pytest.fixture()
 def client(store: InMemorySignInStore) -> Iterator[TestClient]:
     mcp = FastMCP("probe")
+    mcp.add_middleware(ScopedKeyMiddleware())
 
     @mcp.tool
     def whoami() -> str:
         """The user the call acts as."""
         principal = current_principal()
         return str(principal.user_id) if principal else "nobody"
+
+    @mcp.tool
+    def list_events() -> str:
+        """A tool a calendar key holds."""
+        return "events"
 
     mcp_app = mcp.http_app(path="/")
 
@@ -94,6 +111,8 @@ def client(store: InMemorySignInStore) -> Iterator[TestClient]:
         routes=[
             Route("/api/health", _whoami),
             Route("/api/thing", _whoami, methods=["GET", "OPTIONS"]),
+            Route("/api/calendars", _whoami),
+            Route("/api/me", _whoami),
             Route("/ui-page", _whoami),
             Mount("/mcp", mcp_app),
         ],
@@ -209,3 +228,68 @@ def test_an_mcp_call_without_a_token_never_reaches_the_tool(client: TestClient) 
     )
 
     assert response.status_code == 401
+
+
+# --- scoped access keys ---------------------------------------------------------
+
+
+def test_a_scoped_key_reaches_a_route_its_scope_opens_and_acts_as_its_user(
+    client: TestClient,
+) -> None:
+    response = client.get("/api/calendars", headers=_bearer("calendar-key"))
+
+    assert response.status_code == 200
+    assert response.json() == {"user_id": str(KEY_OWNER)}
+    assert client.get("/api/me", headers=_bearer("keyless-key")).status_code == 200
+
+
+def test_a_scoped_key_is_refused_a_route_nobody_listed_before_any_handler_runs(
+    client: TestClient,
+) -> None:
+    response = client.get("/api/thing", headers=_bearer("calendar-key"))
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "scope_required", "scope": None}
+
+
+def test_a_scoped_key_is_told_which_scope_would_open_a_route(client: TestClient) -> None:
+    response = client.post("/api/calendars", headers=_bearer("calendar-key"))
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "scope_required", "scope": None}
+    # Listed, but under a scope the key lacks: that scope is named.
+    response = client.post("/api/calendar/events", headers=_bearer("calendar-key"))
+    assert response.json() == {"detail": "scope_required", "scope": "calendar:write"}
+
+
+def test_a_full_subject_is_not_held_to_the_tables(client: TestClient) -> None:
+    assert client.get("/api/thing", headers=_bearer("alice")).status_code == 200
+
+
+def test_a_scoped_key_sees_and_calls_only_the_tools_its_grant_holds(client: TestClient) -> None:
+    session = McpHttpSession(client, "/mcp/", _bearer("calendar-key"))
+
+    listed = session.list_tools(_bearer("calendar-key"))
+    held = session.call_tool("list_events", {}, _bearer("calendar-key"))
+    unlisted = session.call_tool("whoami", {}, _bearer("calendar-key"))
+
+    assert [tool["name"] for tool in listed["result"]["tools"]] == ["list_events"]
+    assert held["result"]["content"][0]["text"] == "events"
+    assert unlisted["result"]["isError"]
+    assert json.loads(unlisted["result"]["content"][0]["text"]) == {
+        "detail": "scope_required", "scope": None,
+    }
+    everything = session.list_tools(_bearer("alice"))
+    assert {tool["name"] for tool in everything["result"]["tools"]} == {"whoami", "list_events"}
+
+
+def test_a_key_holding_no_tool_scope_cannot_even_reach_the_mcp_endpoint(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/mcp/", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        headers={**_bearer("keyless-key"), "accept": "application/json, text/event-stream"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "scope_required"

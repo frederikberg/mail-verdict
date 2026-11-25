@@ -114,6 +114,7 @@ from mail_verdict.api.schemas import (
     OutboxResponse,
     RespondRequest,
 )
+from mail_verdict.auth.mcp_gate import ScopedKeyMiddleware
 from mail_verdict.auth.ownership import account_display_name
 from mail_verdict.auth.scope import ScopeDenied
 from mail_verdict.config import get_config
@@ -149,6 +150,8 @@ mcp = FastMCP(
         "one or more IMAP accounts; inspect and correct spam verdicts."
     ),
 )
+# A scoped access key sees and calls only the tools its grant holds.
+mcp.add_middleware(ScopedKeyMiddleware())
 
 
 def _parse_instant(value: str | None) -> _datetime | None:

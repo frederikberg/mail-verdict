@@ -26,6 +26,14 @@ The rules a caller follows:
 
 A filter never means "no filter": an empty scope (Scope.system(), a user
 with no accounts) matches nothing.
+
+A scoped access key (auth/grants.py) gets a scope emptied of what its grant
+does not name: never admin, no mail accounts, and DAV accounts only when it
+holds a calendar or contacts scope. That is the second layer behind the
+route and tool tables -- a route the table got wrong still finds no rows --
+and it carries the grant, so rules finer than a scope (where a key may
+write, whether it may send scheduling mail) are asked of the scope:
+require_calendar_write(), require_addressbook_write(), forbid_scheduling().
 """
 
 from __future__ import annotations
@@ -37,6 +45,7 @@ from fastapi import HTTPException
 from sqlalchemy import ColumnElement, Select, literal, or_, select
 from sqlalchemy.orm import InstrumentedAttribute
 
+from mail_verdict.auth.grants import CALENDAR_READ, CONTACTS_READ, Grant
 from mail_verdict.auth.principal import OWNER_USER_ID, Principal
 from mail_verdict.database.connection import DatabaseConnection
 from mail_verdict.database.models import AccountOwner, DavAccountOwner, User
@@ -66,12 +75,14 @@ class Scope:
         is_admin: Whether the admin routes and admin settings are open.
         account_ids: Mail accounts the user owns.
         dav_account_ids: CalDAV/CardDAV accounts the user owns.
+        grant: The grant of a scoped access key; None for full access.
     """
 
     user_id: uuid.UUID | None
     is_admin: bool
     account_ids: frozenset[uuid.UUID] = field(default_factory=frozenset)
     dav_account_ids: frozenset[uuid.UUID] = field(default_factory=frozenset)
+    grant: Grant | None = None
 
     @property
     def is_system(self) -> bool:
@@ -95,6 +106,24 @@ class Scope:
         """Refuse (403) a DAV account that is not the caller's own."""
         if not self.owns_dav_account(dav_account_id):
             raise ScopeDenied()
+
+    def require_calendar_write(self, calendar_id: uuid.UUID | None) -> None:
+        """Refuse (403) writing into a calendar a scoped key's write limit
+        leaves out. Full access is never limited."""
+        if self.grant is not None and not self.grant.may_write_calendar(calendar_id):
+            raise ScopeDenied("collection_not_writable")
+
+    def require_addressbook_write(self, addressbook_id: uuid.UUID | None) -> None:
+        """require_calendar_write(), for address books."""
+        if self.grant is not None and not self.grant.may_write_addressbook(addressbook_id):
+            raise ScopeDenied("collection_not_writable")
+
+    def forbid_scheduling(self) -> None:
+        """Refuse (403) what would send scheduling mail (an invitation, an
+        update or a cancellation to attendees) when the caller is a scoped
+        key: a key never reaches the outbox."""
+        if self.grant is not None:
+            raise ScopeDenied("scope_forbids_scheduling")
 
     def require_admin(self) -> None:
         """Refuse (403) a caller who is not admin."""
@@ -150,11 +179,17 @@ class Scope:
     async def for_principal(cls, db: DatabaseConnection, principal: Principal) -> Scope:
         """The scope of a signed-in request."""
         account_ids, dav_account_ids = await _owned(db, principal.user_id)
+        grant = principal.grant
+        if grant is not None:
+            account_ids = frozenset()
+            if not any(grant.holds(scope) for scope in (CALENDAR_READ, CONTACTS_READ)):
+                dav_account_ids = frozenset()
         return cls(
             user_id=principal.user_id,
-            is_admin=principal.is_admin,
+            is_admin=principal.is_admin and grant is None,
             account_ids=account_ids,
             dav_account_ids=dav_account_ids,
+            grant=grant,
         )
 
     @classmethod

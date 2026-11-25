@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from mail_verdict.auth.grants import Grant
 from mail_verdict.auth.principal import (
     OWNER_USER_ID,
     PrincipalResolver,
@@ -157,3 +158,20 @@ def test_a_new_users_name_falls_back_from_name_to_login_to_email_to_subject() ->
     assert display_name_from_claims({"sub": "s", "preferred_username": "kim"}) == "kim"
     assert display_name_from_claims({"sub": "s", "email": "k@x"}) == "k@x"
     assert display_name_from_claims({"sub": "s"}) == "s"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("user_id", [uuid.uuid4(), OWNER_USER_ID])
+async def test_a_scoped_subject_is_never_admin_whatever_its_users_role(user_id: uuid.UUID) -> None:
+    grant = Grant(frozenset({"calendar:read"}))
+    directory = _Directory({
+        "key": _DirectoryEntry(user_id=user_id, role="admin", disabled=False, grant=grant),
+        "login": _DirectoryEntry(user_id=user_id, role="admin", disabled=False),
+    })
+    resolver = _resolver(directory)
+
+    key = await resolver.resolve(_claims("key"))
+    login = await resolver.resolve(_claims("login"))
+
+    assert key.grant == grant and not key.is_admin
+    assert login.grant is None and login.is_admin

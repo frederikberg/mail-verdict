@@ -1,6 +1,292 @@
 {
   "components": {
     "schemas": {
+      "AccessKeyResponse": {
+        "description": "One access key. `scopes` are the ones held (a write scope implies its\nread scope); a write limit of null means every collection. The sign-in\nfields are null until the key has been used.",
+        "properties": {
+          "access": {
+            "enum": [
+              "full",
+              "scoped"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "addressbook_write_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addressbook Write Ids"
+          },
+          "calendar_write_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Write Ids"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "last_refusal_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Refusal At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "sign_in_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sign In Id"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "user_display_name": {
+            "title": "User Display Name",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "label",
+          "user_id",
+          "user_display_name",
+          "access",
+          "scopes",
+          "calendar_write_ids",
+          "addressbook_write_ids",
+          "created_at",
+          "sign_in_id",
+          "first_seen_at",
+          "last_seen_at",
+          "revoked_at",
+          "last_refusal_at"
+        ],
+        "title": "AccessKeyResponse",
+        "type": "object"
+      },
+      "AccessKeyUpdateRequest": {
+        "description": "The fields of a key to change; the rest stay as they are.\n\nSwitching `access` to `full` without naming scopes or limits clears them,\nand dropping a write scope without naming its limit clears the limit.\n`label` and the write limits take null to clear them.",
+        "properties": {
+          "access": {
+            "default": "full",
+            "enum": [
+              "full",
+              "scoped"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "addressbook_write_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addressbook Write Ids"
+          },
+          "calendar_write_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Write Ids"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "calendar:read",
+                "calendar:write",
+                "contacts:read",
+                "contacts:write"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "title": "AccessKeyUpdateRequest",
+        "type": "object"
+      },
+      "AccessResponse": {
+        "description": "What the caller's own sign-in may do. `full` is everything its user\nmay do; `scoped` is exactly `scopes` (a write scope implies its read\nscope), with writes confined to the listed calendars or address books\nwhen a limit is set (null: every one).",
+        "properties": {
+          "addressbook_write_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addressbook Write Ids"
+          },
+          "calendar_write_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Write Ids"
+          },
+          "mode": {
+            "enum": [
+              "full",
+              "scoped"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "scopes",
+          "calendar_write_ids",
+          "addressbook_write_ids"
+        ],
+        "title": "AccessResponse",
+        "type": "object"
+      },
       "AccountCreateRequest": {
         "description": "Request to create an account.",
         "properties": {
@@ -777,8 +1063,72 @@
         "type": "object"
       },
       "AdminSubjectRequest": {
-        "description": "A token subject (`sub` claim) to sign in as a user.",
+        "description": "A token subject (`sub` claim) to sign in as a user. `access` is `full`\n(everything the user may do, the default) or `scoped` to `scopes`\n(auth/grants.py); `label` names it in the list of access keys, and the\nwrite limits confine a scoped subject's writes to those calendars or\naddress books (null: every one).",
         "properties": {
+          "access": {
+            "default": "full",
+            "enum": [
+              "full",
+              "scoped"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "addressbook_write_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addressbook Write Ids"
+          },
+          "calendar_write_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Write Ids"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "calendar:read",
+                "calendar:write",
+                "contacts:read",
+                "contacts:write"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
           "subject": {
             "minLength": 1,
             "title": "Subject",
@@ -4573,8 +4923,11 @@
         "type": "object"
       },
       "MeResponse": {
-        "description": "The signed-in user. `role` is the effective one: the owner is admin\nwhatever the users table says.",
+        "description": "The signed-in user. `role` is the effective one: the owner is admin\nwhatever the users table says, and a scoped access key is never admin.",
         "properties": {
+          "access": {
+            "$ref": "#/components/schemas/AccessResponse"
+          },
           "disabled": {
             "title": "Disabled",
             "type": "boolean"
@@ -4613,7 +4966,8 @@
           "email",
           "display_name",
           "role",
-          "disabled"
+          "disabled",
+          "access"
         ],
         "title": "MeResponse",
         "type": "object"
@@ -11431,6 +11785,61 @@
         ]
       }
     },
+    "/admin/access-keys": {
+      "get": {
+        "description": "Every access key, or one user's: label first, then subject.",
+        "operationId": "list_access_keys_admin_access_keys_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccessKeyResponse"
+                  },
+                  "title": "Response List Access Keys Admin Access Keys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Access Keys",
+        "tags": [
+          "access-keys"
+        ]
+      }
+    },
     "/admin/accounts": {
       "get": {
         "description": "Every mail account, by display name, with its owner.",
@@ -11938,7 +12347,7 @@
     },
     "/admin/users/{user_id}/subjects": {
       "post": {
-        "description": "Let another token subject sign in as this user -- a second login, or\na machine client's. 409 if the subject already signs in as someone.",
+        "description": "Let another token subject sign in as this user -- a second login, or\na machine client's, with the access it is given. 409 if the subject\nalready signs in as someone; 422 for a grant that cannot be stored or a\nwrite limit naming a collection that is not the user's own (the reasons\nare listed at PATCH /api/admin/users/{user_id}/subjects/{subject}).",
         "operationId": "add_subject_admin_users__user_id__subjects_post",
         "parameters": [
           {
@@ -12040,6 +12449,67 @@
         "summary": "Remove Subject",
         "tags": [
           "admin"
+        ]
+      },
+      "patch": {
+        "description": "Change a subject's label or grant. 404 if it is not this user's; 400\nfor the subject this request signed in with, whose grant would change\nunder the caller mid-request; 422 for a combination that cannot be\nstored (`unknown_scope`, `full_access_carries_no_scopes`,\n`calendar_limit_needs_calendar_write`,\n`addressbook_limit_needs_contacts_write`) or a write limit naming a\ncollection that is not the user's own (`unknown_collection`).",
+        "operationId": "update_access_key_admin_users__user_id__subjects__subject__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessKeyUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessKeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Access Key",
+        "tags": [
+          "access-keys"
         ]
       }
     },
@@ -14861,6 +15331,32 @@
         "summary": "Get Me",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/me/access-keys": {
+      "get": {
+        "description": "The caller's own access keys, read-only. A key is signed out with\nPOST /api/me/sign-ins/{sign_in_id}/revoke.",
+        "operationId": "list_own_access_keys_me_access_keys_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccessKeyResponse"
+                  },
+                  "title": "Response List Own Access Keys Me Access Keys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Own Access Keys",
+        "tags": [
+          "access-keys"
         ]
       }
     },
