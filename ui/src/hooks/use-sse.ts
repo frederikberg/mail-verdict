@@ -21,6 +21,7 @@ import {
   refreshThreads,
 } from "@/hooks/use-mails";
 import { alertKeys } from "@/hooks/use-alerts";
+import { signInKeys } from "@/hooks/use-sign-ins";
 import { useEffectiveAlertFolderIds } from "@/hooks/use-push";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
@@ -611,6 +612,15 @@ export function useSSE(accountId?: string) {
       listen("identity.changed", (e: MessageEvent) => {
         lastEventIdRef.current = e.lastEventId;
         queryClient.invalidateQueries({ queryKey: ["identities"] });
+      });
+
+      // A key attached, changed or removed (in another tab, by another admin,
+      // or through the API). The payload names the subject but carries no
+      // grant, so both key lists are read again.
+      listen("access_key.changed", (e: MessageEvent) => {
+        lastEventIdRef.current = e.lastEventId;
+        queryClient.invalidateQueries({ queryKey: signInKeys.ownKeys });
+        queryClient.invalidateQueries({ queryKey: signInKeys.adminKeys });
       });
 
       // The pipeline document's own optimistic-concurrency check
