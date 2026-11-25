@@ -25,7 +25,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -33,6 +33,7 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mail_verdict.api.deps import require_admin, require_principal
+from mail_verdict.api.events import get_event_ring
 from mail_verdict.auth.access_events import record_access_key_event
 from mail_verdict.auth.grants import (
     CALENDAR_WRITE,
@@ -43,6 +44,7 @@ from mail_verdict.auth.grants import (
     check_fields,
 )
 from mail_verdict.auth.principal import Principal, get_principal_resolver
+from mail_verdict.auth.scope import ADMIN_RING_KEY
 from mail_verdict.database.connection import get_db_connection
 from mail_verdict.database.models import (
     AccessKeyEvent,
@@ -152,6 +154,21 @@ def grant_detail(
             None if addressbook_write_ids is None else sorted(str(i) for i in addressbook_write_ids)
         ),
     }
+
+
+async def announce_access_key_changed(
+    user_id: uuid.UUID, subject: str, op: Literal["created", "changed", "removed"],
+) -> None:
+    """Push access_key.changed to the key's user and to the admins: the
+    access-key list of either may be open in another tab. The tables are
+    MailVerdict's own, so nothing upstream announces a write to them. The
+    event carries the subject and what happened, never the grant."""
+    event_ring = get_event_ring()
+    if event_ring is None:
+        return
+    data = {"subject": subject, "user_id": str(user_id), "op": op}
+    await event_ring.add(user_id, "access_key.changed", data)
+    await event_ring.add(ADMIN_RING_KEY, "access_key.changed", data)
 
 
 def _identity_detail(identity: UserIdentity) -> dict[str, Any]:
@@ -306,4 +323,5 @@ async def update_access_key(
     resolver = get_principal_resolver()
     if resolver is not None:
         resolver.forget()
+    await announce_access_key_changed(user_id, subject, "changed")
     return (await _keys(UserIdentity.subject == subject, only_keys=False))[0]

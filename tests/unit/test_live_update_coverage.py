@@ -90,13 +90,6 @@ _UNANNOUNCED: dict[str, str] = {
         "The removed user's accounts go with PostIMAP's own notifications and their streams "
         "end at once; nothing else of theirs is anyone else's to see."
     ),
-    "POST /admin/users/{user_id}/subjects": (
-        "The same, for a subject added to a user."
-    ),
-    "DELETE /admin/users/{user_id}/subjects/{subject}": (
-        "The same, for a subject removed; the streams of the sign-ins it revokes end at once "
-        "(api/events.py), and their clients' next request is refused."
-    ),
     "POST /me/sign-ins/current/revoke": (
         "The same as revoking one's own sign-in from the list."
     ),

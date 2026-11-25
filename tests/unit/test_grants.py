@@ -189,3 +189,27 @@ def test_a_key_may_never_cause_scheduling_mail_and_full_access_may() -> None:
         Scope(user_id=USER, is_admin=False, grant=_grant("calendar:write")).forbid_scheduling()
     assert raised.value.detail == "scope_forbids_scheduling"
     Scope(user_id=USER, is_admin=True).forbid_scheduling()
+
+
+# --- the live event -----------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_key_change_reaches_its_user_and_the_admins_and_nobody_else(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from mail_verdict.api import access_keys
+    from mail_verdict.api.event_ring import EventRing
+    from mail_verdict.auth.scope import ADMIN_RING_KEY
+
+    ring = EventRing()
+    monkeypatch.setattr(access_keys, "get_event_ring", lambda: ring)
+    stranger = uuid.uuid4()
+
+    await access_keys.announce_access_key_changed(USER, "key-1", "changed")
+
+    for audience in (str(USER), ADMIN_RING_KEY):
+        (event,) = await ring.replay_from(0, [audience])
+        assert event["event_type"] == "access_key.changed"
+        assert event["data"] == {"subject": "key-1", "user_id": str(USER), "op": "changed"}
+    assert await ring.replay_from(0, [str(stranger), "everyone"]) == []
