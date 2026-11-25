@@ -16,6 +16,7 @@ ROUTE_CASES: list[RouteCase] = [
     RouteCase("GET /api/auth/config", "public"),
     *(RouteCase(f"{method} /mcp", "public") for method in ("GET", "POST", "DELETE")),
     RouteCase("GET /api/me", "own"),
+    RouteCase("GET /api/me/access-keys", "own"),
     RouteCase("GET /api/openapi.json", "own"),
     RouteCase("GET /api/docs", "own"),
     RouteCase("GET /api/docs/oauth2-redirect", "own"),
@@ -28,6 +29,12 @@ ROUTE_CASES: list[RouteCase] = [
     RouteCase(
         "PATCH /api/admin/users/{user_id}", "admin",
         params=_b_user, body=lambda world: {"display_name": "B"},
+    ),
+    RouteCase("GET /api/admin/access-keys", "admin"),
+    RouteCase(
+        "PATCH /api/admin/users/{user_id}/subjects/{subject}", "admin",
+        params=lambda world: {"user_id": world.b_user_id, "subject": f"none-{uuid.uuid4()}"},
+        body=lambda world: {"label": "key"}, owner_also=(404,),
     ),
     RouteCase("GET /api/admin/accounts", "admin"),
     RouteCase(
