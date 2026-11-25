@@ -208,8 +208,10 @@ listed one per person.
 
 A machine client does not have to be as powerful as the person it signs in as. An admin attaches
 its subject to a user as an *access key* limited to scopes: `calendar:read`, `calendar:write`,
-`contacts:read` and `contacts:write`. A scoped key never reaches mail, settings, accounts, secrets
-or any admin route, and is never admin whatever its user is; everything it may reach is listed in
+`contacts:read` and `contacts:write`, optionally with writes confined to chosen calendars or
+address books. A scoped key never reaches mail, settings, accounts, secrets or any admin route, is
+never admin whatever its user is, and cannot send invitations; a refused request is recorded and
+alerts the key's user. Everything it may reach is listed in
 [`docs/access-matrix.md`](docs/access-matrix.md), and a route nobody opened for scoped keys stays
 closed to them. Attaching, narrowing, widening and removing a key takes effect within `auth.principal_cache_seconds`.
 
