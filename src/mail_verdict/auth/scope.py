@@ -30,7 +30,8 @@ with no accounts) matches nothing.
 A scoped access key (auth/grants.py) gets a scope emptied of what its grant
 does not name: never admin, no mail accounts, and DAV accounts only when it
 holds a calendar or contacts scope. That is the second layer behind the
-route and tool tables -- a route the table got wrong still finds no rows --
+route and tool tables -- a route the table got wrong still finds no mail or DAV data of
+a resource the key holds no scope for --
 and it carries the grant, so rules finer than a scope (where a key may
 write, whether it may send scheduling mail) are asked of the scope:
 require_calendar_write(), require_addressbook_write(), forbid_scheduling().
