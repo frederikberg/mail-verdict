@@ -1797,6 +1797,13 @@ class EventAttendeeIn(BaseModel):
 
 class EventCreateRequest(BaseModel):
     calendar_id: uuid.UUID
+    # A client's own stable identifier for the event (the iCalendar UID),
+    # making the create idempotent per calendar: asking again with the same
+    # uid returns the event already there, changed or not, instead of
+    # creating a second one. Without it a fresh uid is generated.
+    uid: str | None = Field(
+        default=None, min_length=1, max_length=200, pattern=r"^[A-Za-z0-9._@:+=-]+$",
+    )
     summary: str
     dtstart: datetime
     dtend: datetime

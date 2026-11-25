@@ -1594,6 +1594,7 @@ async def create_event(
     attendee_emails: list[str] | None = None,
     reminders: list[dict[str, Any]] | None = None,
     transparency: str | None = None,
+    uid: str | None = None,
 ) -> dict[str, Any]:
     """
     Create an event. With attendees, the calendar needs a linked identity
@@ -1626,6 +1627,11 @@ async def create_event(
             (if any) to apply instead
         transparency: "opaque" (busy, the default) or "transparent"
             (free) -- whether this event blocks free/busy time, optional
+        uid: Your own stable identifier for the event, optional (letters,
+            digits and `._@:+=-`, at most 200). With it the call is
+            idempotent in that calendar: an event already holding the uid is
+            returned as it is, never duplicated -- safe to repeat after a
+            timeout
 
     Returns:
         The created event instance, or {"error": ...} on failure -- e.g.
@@ -1634,6 +1640,7 @@ async def create_event(
     """
     request = EventCreateRequest(
         calendar_id=calendar_id,  # type: ignore[arg-type]
+        uid=uid,
         summary=summary, dtstart=dtstart, dtend=dtend,  # type: ignore[arg-type]
         all_day=all_day, location=location, description=description, rrule=rrule, tz=tz,
         attendees=(

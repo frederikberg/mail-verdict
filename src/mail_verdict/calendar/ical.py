@@ -817,6 +817,7 @@ def build_new_event(
     attendees: list[tuple[str, str | None]] | None = None,
     reminders: list[Reminder] | None = None,
     transparency: str | None = None,
+    uid: str | None = None,
 ) -> str:
     """
     Build a fresh VCALENDAR body for an event this application originates.
@@ -842,9 +843,10 @@ def build_new_event(
         reminders: DISPLAY alarms to write; None or empty means none
         transparency: "opaque" or "transparent"; None leaves TRANSP unset,
             which RFC 5545 already defines as OPAQUE
+        uid: The event's UID; a fresh one is generated when None
 
     Returns:
-        A new VCALENDAR body with a freshly generated UID
+        A new VCALENDAR body, with the given UID or a freshly generated one
 
     Raises:
         ValueError: tz is given with all_day, or is not a recognised
@@ -877,7 +879,7 @@ def build_new_event(
         cal.add_component(Timezone.from_tzinfo(cast(tzinfo, dtstart.tzinfo), tzid=tz))
 
     event = Event()
-    event.add("UID", str(uuid.uuid4()))
+    event.add("UID", uid or str(uuid.uuid4()))
     event.add("DTSTAMP", datetime.now(timezone.utc))
     event.add("SUMMARY", summary)
     event.add("DTSTART", dtstart.date() if all_day else dtstart)
