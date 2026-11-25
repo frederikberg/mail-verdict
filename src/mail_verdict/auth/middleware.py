@@ -10,6 +10,11 @@ with `WWW-Authenticate: Bearer`; a disabled or (with auto-provisioning off)
 unknown user gets 403 naming which. A token of a revoked sign-in
 (auth/sign_ins.py) gets 401 `device_revoked`.
 
+A scoped subject (auth/grants.py) is then held to its grant: the request
+passes only if the route table lists it under a scope the grant holds, and is
+otherwise answered 403 `{"detail": "scope_required", "scope": <scope or
+null>}` before any handler or body read. Full subjects skip the check.
+
 CORS preflights (OPTIONS) pass unauthenticated: a browser sends them without
 credentials by design, and they reach no endpoint.
 """
@@ -21,6 +26,7 @@ import logging
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from mail_verdict.auth.grants import Refusal, refusal_for_route, report_refusal
 from mail_verdict.auth.principal import AuthError, PrincipalResolver, bind_principal
 from mail_verdict.auth.sign_ins import DEVICE_NAME_HEADER, SignInRegistry, device_name
 from mail_verdict.auth.tokens import InvalidToken, TokenVerifier
@@ -79,6 +85,14 @@ class AuthMiddleware:
             await _refuse(send, exc)
             return
 
+        if principal.grant is not None:
+            path = scope["path"]
+            refusal = refusal_for_route(principal.grant, scope["method"], path)
+            if refusal is not None:
+                await report_refusal(principal, f"{scope['method']} {path}", refusal)
+                await _refuse_scope(send, refusal)
+                return
+
         with bind_principal(principal):
             await self.app(scope, receive, send)
 
@@ -101,6 +115,19 @@ def _bearer_token(scope: Scope) -> str | None:
                 return token.strip()
             return None
     return None
+
+
+async def _refuse_scope(send: Send, refusal: Refusal) -> None:
+    """Answer 403 `scope_required`, naming the scope that would open the route."""
+    body = json.dumps({"detail": "scope_required", "scope": refusal.scope}).encode()
+    await send({
+        "type": "http.response.start", "status": 403,
+        "headers": [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+        ],
+    })
+    await send({"type": "http.response.body", "body": body})
 
 
 async def _refuse(send: Send, error: AuthError) -> None:

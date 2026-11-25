@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from mail_verdict.api.access_keys import me_router as access_keys_me_router
+from mail_verdict.api.access_keys import router as access_keys_router
 from mail_verdict.api.account_order import router as account_order_router
 from mail_verdict.api.accounts import router as accounts_router
 from mail_verdict.api.admin import router as admin_router
@@ -52,7 +54,9 @@ all_routers: list[APIRouter] = [
     auth_config_router,
     me_router,
     sign_ins_me_router,
+    access_keys_me_router,
     admin_router,
+    access_keys_router,
     sign_ins_admin_router,
     mails_router,
     mails_account_router,

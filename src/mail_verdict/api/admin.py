@@ -9,7 +9,8 @@ GET   /api/admin/users                         -- every user, their subjects and
 POST  /api/admin/users                         -- add a user before their first sign-in
 PATCH /api/admin/users/{user_id}               -- rename, change role, disable or enable
 DELETE /api/admin/users/{user_id}              -- remove a user and everything that is theirs
-POST  /api/admin/users/{user_id}/subjects      -- let another token subject sign in as a user
+POST  /api/admin/users/{user_id}/subjects      -- let another token subject sign in as a user,
+                                                  fully or scoped (api/access_keys.py)
 DELETE /api/admin/users/{user_id}/subjects/{subject} -- stop a subject signing in as a user
 GET   /api/admin/accounts                      -- every mail account and its owner
 PUT   /api/admin/accounts/{account_id}/owner   -- give a mail account to another user
@@ -29,12 +30,15 @@ from sqlalchemy import Table, delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from mail_verdict.alerts.audience import reassign_account_alerts
+from mail_verdict.api.access_keys import check_grant, ensure_collections, grant_detail
 from mail_verdict.api.accounts import remove_mail_account, require_account_delete_support
 from mail_verdict.api.dav_accounts import require_dav_support
 from mail_verdict.api.deps import require_admin, require_principal
 from mail_verdict.api.events import get_event_ring
 from mail_verdict.api.sign_ins import revoke_sign_ins
 from mail_verdict.api.unified import drop_account_memberships
+from mail_verdict.auth.access_events import record_access_key_event
+from mail_verdict.auth.grants import AccessMode, ScopeName
 from mail_verdict.auth.ownership import (
     account_display_name,
     forget_account_owner,
@@ -101,9 +105,18 @@ class AdminUserUpdateRequest(BaseModel):
 
 
 class AdminSubjectRequest(BaseModel):
-    """A token subject (`sub` claim) to sign in as a user."""
+    """A token subject (`sub` claim) to sign in as a user. `access` is `full`
+    (everything the user may do, the default) or `scoped` to `scopes`
+    (auth/grants.py); `label` names it in the list of access keys, and the
+    write limits confine a scoped subject's writes to those calendars or
+    address books (null: every one)."""
 
     subject: str = Field(min_length=1)
+    label: str | None = Field(default=None, min_length=1)
+    access: AccessMode = "full"
+    scopes: list[ScopeName] = Field(default_factory=list)
+    calendar_write_ids: list[uuid.UUID] | None = None
+    addressbook_write_ids: list[uuid.UUID] | None = None
 
 
 class AdminAccountResponse(BaseModel):
@@ -295,15 +308,44 @@ async def remove_user(
 
 
 @router.post("/users/{user_id}/subjects", response_model=AdminUserResponse, status_code=201)
-async def add_subject(user_id: uuid.UUID, request: AdminSubjectRequest) -> AdminUserResponse:
+async def add_subject(
+    user_id: uuid.UUID,
+    request: AdminSubjectRequest,
+    principal: Principal = Depends(require_principal),
+) -> AdminUserResponse:
     """Let another token subject sign in as this user -- a second login, or
-    a machine client's. 409 if the subject already signs in as someone."""
+    a machine client's, with the access it is given. 409 if the subject
+    already signs in as someone; 422 for a grant that cannot be stored or a
+    write limit naming a collection that is not the user's own (the reasons
+    are listed at PATCH /api/admin/users/{user_id}/subjects/{subject})."""
+    scopes = check_grant(
+        request.access, request.scopes, request.calendar_write_ids,
+        request.addressbook_write_ids,
+    )
     try:
         async with get_db_connection().session() as session:
             if await session.get(User, user_id) is None:
                 raise HTTPException(status_code=404, detail="User not found")
-            session.add(UserIdentity(subject=request.subject, user_id=user_id))
+            await ensure_collections(session, user_id, "calendar", request.calendar_write_ids)
+            await ensure_collections(
+                session, user_id, "addressbook", request.addressbook_write_ids,
+            )
+            session.add(
+                UserIdentity(
+                    subject=request.subject, user_id=user_id, label=request.label,
+                    access=request.access, scopes=scopes,
+                    calendar_write_ids=request.calendar_write_ids,
+                    addressbook_write_ids=request.addressbook_write_ids,
+                )
+            )
             await session.flush()
+            record_access_key_event(
+                session, request.subject, user_id, "created", actor_user_id=principal.user_id,
+                detail=grant_detail(
+                    request.label, request.access, scopes, request.calendar_write_ids,
+                    request.addressbook_write_ids,
+                ),
+            )
     except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="subject already belongs to a user") from exc
     resolver = get_principal_resolver()
@@ -329,6 +371,10 @@ async def remove_subject(
         if identity is None or identity.user_id != user_id:
             raise HTTPException(status_code=404, detail="Subject not found for this user")
         await session.delete(identity)
+        record_access_key_event(
+            session, subject, user_id, "revoked", actor_user_id=principal.user_id,
+            detail={"reason": "removed"},
+        )
         user_changed_on_commit(session)
     await revoke_sign_ins(SignIn.subject == subject, SignIn.kind != "browser")
     resolver = get_principal_resolver()

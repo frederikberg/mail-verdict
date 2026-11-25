@@ -7,6 +7,9 @@ on a new instance; after that they are ordinary rows an admin can remove).
 An unknown subject becomes a new ordinary user when auth.auto_provision
 allows it. The owner (OWNER_USER_ID) is always admin and never disabled.
 
+A subject is also full or scoped (auth/grants.py): a scoped subject's
+principal carries its Grant and is never admin, whatever its user's role.
+
 The resolved principal is bound for the request by auth/middleware.py, which
 also matches it to its sign-in (auth/sign_ins.py), and read back with
 current_principal(). Code acting on data does not read it directly: it asks
@@ -28,6 +31,7 @@ from typing import Any, Protocol
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from mail_verdict.auth.grants import Grant, grant_from_columns
 from mail_verdict.database.connection import DatabaseConnection, get_db_connection
 from mail_verdict.database.models import User, UserIdentity
 
@@ -66,15 +70,18 @@ class Principal:
     Attributes:
         user_id: The users row.
         subject: The token subject that signed in.
-        is_admin: Whether this user may use the admin routes and settings.
+        is_admin: Whether this user may use the admin routes and settings;
+            never true for a scoped subject.
         sign_in_id: The sign_ins row the request's token belongs to, once
             the gate has matched it (auth/sign_ins.py).
+        grant: What a scoped subject may do; None for full access.
     """
 
     user_id: uuid.UUID
     subject: str
     is_admin: bool
     sign_in_id: uuid.UUID | None = None
+    grant: Grant | None = None
 
 
 _current_principal: ContextVar[Principal | None] = ContextVar(
@@ -110,6 +117,7 @@ class _DirectoryEntry:
     user_id: uuid.UUID
     role: str
     disabled: bool
+    grant: Grant | None = None
 
 
 class UserDirectory(Protocol):
@@ -142,14 +150,23 @@ class DatabaseUserDirectory:
         async with self._db.session() as session:
             row = (
                 await session.execute(
-                    select(User.id, User.role, User.disabled)
+                    select(
+                        User.id, User.role, User.disabled, UserIdentity.access,
+                        UserIdentity.scopes, UserIdentity.calendar_write_ids,
+                        UserIdentity.addressbook_write_ids,
+                    )
                     .join(UserIdentity, UserIdentity.user_id == User.id)
                     .where(UserIdentity.subject == subject)
                 )
             ).one_or_none()
         if row is None:
             return None
-        return _DirectoryEntry(user_id=row.id, role=row.role, disabled=row.disabled)
+        return _DirectoryEntry(
+            user_id=row.id, role=row.role, disabled=row.disabled,
+            grant=grant_from_columns(
+                row.access, row.scopes, row.calendar_write_ids, row.addressbook_write_ids,
+            ),
+        )
 
     async def provision(
         self, subject: str, email: str | None, display_name: str,
@@ -270,7 +287,9 @@ class PrincipalResolver:
         return Principal(
             user_id=entry.user_id,
             subject=subject,
-            is_admin=entry.role == "admin" or entry.user_id == OWNER_USER_ID,
+            is_admin=entry.grant is None
+            and (entry.role == "admin" or entry.user_id == OWNER_USER_ID),
+            grant=entry.grant,
         )
 
 
