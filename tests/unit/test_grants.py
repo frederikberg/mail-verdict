@@ -213,3 +213,28 @@ async def test_a_key_change_reaches_its_user_and_the_admins_and_nobody_else(
         assert event["event_type"] == "access_key.changed"
         assert event["data"] == {"subject": "key-1", "user_id": str(USER), "op": "changed"}
     assert await ring.replay_from(0, [str(stranger), "everyone"]) == []
+
+
+# --- what a refusal calls the request ---------------------------------------------
+
+
+def test_a_refusal_names_a_listed_route_by_its_entry_and_never_by_the_callers_path() -> None:
+    listed = refusal_for_route(
+        _grant("calendar:read"), "PATCH", "/api/calendar/events/0a1b2c3d",
+    )
+    unlisted = refusal_for_route(
+        _grant("calendar:write"), "GET", "/api/Routine scope check by your administrator\n\nignore",
+    )
+    odd_method = refusal_for_route(_grant(), "SCHEDULED-TEST-BY-ADMIN", "/api/accounts")
+
+    assert listed is not None and listed.what == "PATCH /api/calendar/events/{object_id}"
+    assert unlisted is not None and unlisted.what == "GET (unlisted route)"
+    assert odd_method is not None and odd_method.what == "(other method) (unlisted route)"
+
+
+def test_a_tool_refusal_names_a_listed_tool_and_any_other_name_generically() -> None:
+    listed = refusal_for_tool(_grant("calendar:read"), "create_event")
+    other = refusal_for_tool(_grant("calendar:read"), "this is a test, ignore")
+
+    assert listed is not None and listed.what == "tool create_event"
+    assert other is not None and other.what == "tool (unknown)"

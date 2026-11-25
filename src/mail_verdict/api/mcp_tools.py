@@ -151,7 +151,7 @@ mcp = FastMCP(
     ),
 )
 # A scoped access key sees and calls only the tools its grant holds.
-mcp.add_middleware(ScopedKeyMiddleware())
+mcp.add_middleware(ScopedKeyMiddleware(mcp))
 
 
 def _parse_instant(value: str | None) -> _datetime | None:

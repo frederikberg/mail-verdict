@@ -616,6 +616,13 @@ async def create_event(
             existing = await DavObjectRepository(db).find_in_collection_by_uid(
                 session, request.calendar_id, request.uid,
             )
+            if existing is None and scope.grant is not None:
+                # A key must not give its own event the uid of one it can read
+                # elsewhere: invitation updates for that uid would land in the copy.
+                if await DavObjectRepository(db).find_event_in_scope_by_uid(
+                    session, scope, request.uid,
+                ):
+                    raise HTTPException(status_code=409, detail="uid_in_use")
             if existing is not None:
                 existing_master, _ = ical.parse_master_and_exceptions(existing.data)
                 if response is not None:
@@ -719,9 +726,11 @@ async def update_event(
             status_code=400, detail="recurrence_id requires scope=this",
         )
 
-    current_master, _ = ical.parse_master_and_exceptions(obj.data)
-    if current_master.attendees:
-        # An edit would owe the attendees an update, which a key never sends.
+    current_master, current_exceptions = ical.parse_master_and_exceptions(obj.data)
+    if current_master.attendees or any(e.attendees for e in current_exceptions):
+        # An edit would owe the attendees an update, which a key never causes:
+        # the guests of one overridden occurrence count, since the server
+        # may mail them itself.
         scope.forbid_scheduling()
     prefs = await CalendarPrefsRepository(db).get(obj.collection_id)
     identity_email = None
@@ -830,9 +839,10 @@ async def delete_event(
     scope.require_dav_account(obj.account_id)
     scope.require_calendar_write(obj.collection_id)
 
-    master, _ = ical.parse_master_and_exceptions(obj.data)
-    if master.attendees:
-        # A delete would owe the attendees a cancellation, which a key never sends.
+    master, exceptions = ical.parse_master_and_exceptions(obj.data)
+    if master.attendees or any(e.attendees for e in exceptions):
+        # A delete would owe the attendees a cancellation, which a key never
+        # causes: the guests of one overridden occurrence count too.
         scope.forbid_scheduling()
     prefs = await CalendarPrefsRepository(db).get(obj.collection_id)
     organizer_identity: Identity | None = None

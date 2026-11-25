@@ -95,6 +95,19 @@ async def _seed_event(
     return obj.id
 
 
+_GUEST_ON_ONE_OCCURRENCE = (
+    "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n"
+    "BEGIN:VEVENT\r\nUID:one-guest\r\nDTSTAMP:20260901T120000Z\r\n"
+    "DTSTART:20260910T100000Z\r\nDTEND:20260910T110000Z\r\nSUMMARY:Standup\r\n"
+    "RRULE:FREQ=DAILY;COUNT=3\r\nORGANIZER:mailto:me@example.com\r\nEND:VEVENT\r\n"
+    "BEGIN:VEVENT\r\nUID:one-guest\r\nRECURRENCE-ID:20260911T100000Z\r\n"
+    "DTSTAMP:20260901T120000Z\r\nDTSTART:20260911T120000Z\r\nDTEND:20260911T130000Z\r\n"
+    "SUMMARY:Standup with Anna\r\nORGANIZER:mailto:me@example.com\r\n"
+    "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:anna@example.com\r\nEND:VEVENT\r\n"
+    "END:VCALENDAR\r\n"
+)
+
+
 async def _seed_contact(
     db: DatabaseConnection, account_id: uuid.UUID, addressbook_id: uuid.UUID,
 ) -> uuid.UUID:
@@ -317,6 +330,55 @@ class TestScopedKeyAndEvents:
             _count, migrated_db,
             "SELECT count(*) FROM dav_objects WHERE id = :i AND deleted_at IS NULL", {"i": invited},
         ) == 1
+
+    def test_a_guest_on_one_occurrence_only_counts_as_attendees(
+        self, client: TestClient, app: FastAPI, migrated_db: DatabaseConnection,
+    ) -> None:
+        """The master has no ATTENDEE, one overridden occurrence does: touching
+        the event still owes that guest an update or a cancellation."""
+        account, allowed, _, _ = self._setup(client, app, migrated_db)
+
+        async def seed() -> uuid.UUID:
+            async with migrated_db.session() as session:
+                obj = await create_object(
+                    session, dav_account_id=account, collection_id=allowed,
+                    data=_GUEST_ON_ONE_OCCURRENCE,
+                )
+            return obj.id
+
+        event = client.portal.call(seed)
+        with patch(_EVENTS, return_value=migrated_db):
+            edit = client.patch(f"/calendar/events/{event}", json={"summary": "x"})
+            delete = client.delete(f"/calendar/events/{event}")
+
+        for refused in (edit, delete):
+            assert refused.status_code == 403
+            assert refused.json() == {"detail": "scope_forbids_scheduling"}
+
+    def test_a_key_cannot_reuse_the_uid_of_an_event_it_can_see_elsewhere(
+        self, client: TestClient, app: FastAPI, migrated_db: DatabaseConnection,
+    ) -> None:
+        account, allowed, other_account, other = self._setup(client, app, migrated_db)
+        act_as_owner_of_everything(app, migrated_db)
+        with patch(_EVENTS, return_value=migrated_db):
+            theirs = client.post(
+                "/calendar/events",
+                json={**_NEW_EVENT, "calendar_id": str(other), "uid": "taken-1"},
+            )
+            act_as(app, _key(account, other_account, scopes={"calendar:write"}))
+            twin = client.post(
+                "/calendar/events",
+                json={**_NEW_EVENT, "calendar_id": str(allowed), "uid": "taken-1"},
+            )
+            act_as_owner_of_everything(app, migrated_db)
+            as_owner = client.post(
+                "/calendar/events",
+                json={**_NEW_EVENT, "calendar_id": str(allowed), "uid": "taken-1"},
+            )
+
+        assert theirs.status_code == 201
+        assert twin.status_code == 409 and twin.json() == {"detail": "uid_in_use"}
+        assert as_owner.status_code == 201
 
     def test_full_access_is_not_limited_by_any_of_it(
         self, client: TestClient, migrated_db: DatabaseConnection,

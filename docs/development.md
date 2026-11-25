@@ -349,3 +349,5 @@ runs `alembic upgrade head` when it starts, the database already holds a revisio
 not contain, and alembic stops with `Can't locate revision`, so the pod never becomes ready. To go
 back, run `alembic downgrade <previous revision>` from the newer image first (a downgrade that
 rewrites a column takes about as long as the upgrade did), then deploy the previous image.
+Revision 0058 (scoped access keys) refuses to downgrade while a scoped key exists, since the
+previous release would sign it in with everything its user may do: remove the scoped keys first.

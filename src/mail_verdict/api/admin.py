@@ -35,6 +35,7 @@ from mail_verdict.api.access_keys import (
     check_grant,
     ensure_collections,
     grant_detail,
+    require_limits_named,
 )
 from mail_verdict.api.accounts import remove_mail_account, require_account_delete_support
 from mail_verdict.api.dav_accounts import require_dav_support
@@ -321,12 +322,14 @@ async def add_subject(
     """Let another token subject sign in as this user -- a second login, or
     a machine client's, with the access it is given. 409 if the subject
     already signs in as someone; 422 for a grant that cannot be stored or a
-    write limit naming a collection that is not the user's own (the reasons
-    are listed at PATCH /api/admin/users/{user_id}/subjects/{subject})."""
+    write limit naming a collection that is not the user's own, or a write
+    scope without its limit (the reasons are listed at PATCH
+    /api/admin/users/{user_id}/subjects/{subject})."""
     scopes = check_grant(
         request.access, request.scopes, request.calendar_write_ids,
         request.addressbook_write_ids,
     )
+    require_limits_named(scopes, [], set(request.model_fields_set))
     try:
         async with get_db_connection().session() as session:
             if await session.get(User, user_id) is None:

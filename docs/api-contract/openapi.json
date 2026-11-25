@@ -159,7 +159,7 @@
         "type": "object"
       },
       "AccessKeyUpdateRequest": {
-        "description": "The fields of a key to change; the rest stay as they are.\n\nSwitching `access` to `full` without naming scopes or limits clears them,\nand dropping a write scope without naming its limit clears the limit.\n`label` and the write limits take null to clear them.",
+        "description": "The fields of a key to change; the rest stay as they are.\n\nSwitching `access` to `full` without naming scopes or limits clears them,\nand dropping a write scope without naming its limit clears the limit. A\nwrite scope the key did not hold must come with its limit, null meaning\nevery collection.\n`label` and the write limits take null to clear them.",
         "properties": {
           "access": {
             "default": "full",
@@ -12361,7 +12361,7 @@
     },
     "/admin/users/{user_id}/subjects": {
       "post": {
-        "description": "Let another token subject sign in as this user -- a second login, or\na machine client's, with the access it is given. 409 if the subject\nalready signs in as someone; 422 for a grant that cannot be stored or a\nwrite limit naming a collection that is not the user's own (the reasons\nare listed at PATCH /api/admin/users/{user_id}/subjects/{subject}).",
+        "description": "Let another token subject sign in as this user -- a second login, or\na machine client's, with the access it is given. 409 if the subject\nalready signs in as someone; 422 for a grant that cannot be stored or a\nwrite limit naming a collection that is not the user's own, or a write\nscope without its limit (the reasons are listed at PATCH\n/api/admin/users/{user_id}/subjects/{subject}).",
         "operationId": "add_subject_admin_users__user_id__subjects_post",
         "parameters": [
           {
@@ -12466,7 +12466,7 @@
         ]
       },
       "patch": {
-        "description": "Change a subject's label or grant. 404 if it is not this user's; 400\nfor the subject this request signed in with, whose grant would change\nunder the caller mid-request; 422 for a combination that cannot be\nstored (`unknown_scope`, `full_access_carries_no_scopes`,\n`calendar_limit_needs_calendar_write`,\n`addressbook_limit_needs_contacts_write`) or a write limit naming a\ncollection that is not the user's own (`unknown_collection`).",
+        "description": "Change a subject's label or grant. 404 if it is not this user's; 400\nfor the subject this request signed in with, whose grant would change\nunder the caller mid-request; 422 for a combination that cannot be\nstored (`unknown_scope`, `full_access_carries_no_scopes`,\n`calendar_limit_needs_calendar_write`,\n`addressbook_limit_needs_contacts_write`), a write scope the key did not\nhold before without saying where it may write (`calendar_limit_required`,\n`addressbook_limit_required`; null names \"every one\"), or a write limit\nnaming a collection that is not the user's own (`unknown_collection`).",
         "operationId": "update_access_key_admin_users__user_id__subjects__subject__patch",
         "parameters": [
           {

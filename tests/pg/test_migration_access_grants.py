@@ -217,3 +217,39 @@ async def test_downgrade_restores_the_previous_shape_and_keeps_the_subjects(
     assert subjects == set(_SUBJECTS)
 
     await _upgrade(db_at_previous, "head")
+
+
+@pytest.mark.asyncio
+async def test_downgrade_refuses_while_a_scoped_key_exists_rather_than_widen_it(
+    db_at_previous: str,
+) -> None:
+    await _upgrade(db_at_previous, "head")
+    engine = create_async_engine(db_at_previous)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "UPDATE user_identities SET access = 'scoped', "
+                    "scopes = ARRAY['calendar:read'] WHERE subject = 'owner-agent'"
+                )
+            )
+
+        with pytest.raises(RuntimeError, match="scoped access key"):
+            await _downgrade(db_at_previous, _PREVIOUS)
+
+        async with engine.connect() as conn:
+            access = (
+                await conn.execute(
+                    text("SELECT access FROM user_identities WHERE subject = 'owner-agent'")
+                )
+            ).scalar_one()
+        assert access == "scoped"
+
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("UPDATE user_identities SET access = 'full', scopes = '{}' "
+                     "WHERE subject = 'owner-agent'")
+            )
+        await _downgrade(db_at_previous, _PREVIOUS)
+    finally:
+        await engine.dispose()

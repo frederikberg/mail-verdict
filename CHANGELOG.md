@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A refused access key request is written to the key's audit trail and raises an
   `access_key_refused` alert for the key's user, at most once per key and day; signing a key out is
   recorded too.
+- A scoped access key's refusal record and alert name the request by the route table entry it
+  matched or a tool by its name, never by text the caller chose, and are cut at 200 characters.
+  Giving a key a write scope it did not hold needs its write limit named in the same request
+  (`calendar_limit_required`, `addressbook_limit_required`; `null` means every collection), a key
+  is refused any event that has attendees on any occurrence, and the downgrade of revision 0058
+  refuses while scoped keys exist instead of leaving them behind as full credentials. A key cannot
+  create an event with the `uid` of one it can see in another calendar (`409` `uid_in_use`).
+- A change to an access key takes effect at once even for a request already reading the old grant;
+  FastMCP is pinned below the next major release, since the key's tool gate depends on its hooks.
 - Creating an event with a client-supplied `uid` is idempotent per calendar: the same `uid` again
   returns the event already there (`200` instead of `201`) instead of creating a second one. The
   `create_event` MCP tool takes the same `uid`.
