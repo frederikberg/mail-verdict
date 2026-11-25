@@ -2,10 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { SignIn } from "@/types/api";
+import type { AccessKeyUpdateRequest, AddSubjectRequest, SignIn } from "@/types/api";
 
 export const signInKeys = {
   own: ["sign-ins", "own"] as const,
+  ownKeys: ["sign-ins", "access-keys"] as const,
+  adminKeys: ["admin", "access-keys"] as const,
   admin: (filter: { userId?: string; kind?: SignIn["kind"] }) =>
     ["admin", "sign-ins", filter.userId ?? "", filter.kind ?? ""] as const,
 };
@@ -13,6 +15,24 @@ export const signInKeys = {
 /** The caller's own sign-ins. */
 export function useOwnSignIns() {
   return useQuery({ queryKey: signInKeys.own, queryFn: () => api.me.signIns(), staleTime: 15_000 });
+}
+
+/** The caller's own access keys, read-only. */
+export function useOwnAccessKeys() {
+  return useQuery({
+    queryKey: signInKeys.ownKeys,
+    queryFn: () => api.me.accessKeys(),
+    staleTime: 15_000,
+  });
+}
+
+/** Every access key of every user, for an administrator. */
+export function useAdminAccessKeys() {
+  return useQuery({
+    queryKey: signInKeys.adminKeys,
+    queryFn: () => api.admin.accessKeys(),
+    staleTime: 15_000,
+  });
 }
 
 /** Any user's sign-ins, or one kind's, for an administrator. */
@@ -58,8 +78,8 @@ export function useSignOutUser() {
 export function useAddSubject() {
   const invalidate = useInvalidateSignIns();
   return useMutation({
-    mutationFn: ({ userId, subject }: { userId: string; subject: string }) =>
-      api.admin.addSubject(userId, subject),
+    mutationFn: ({ userId, ...data }: { userId: string } & AddSubjectRequest) =>
+      api.admin.addSubject(userId, data),
     onSuccess: invalidate,
   });
 }
@@ -69,6 +89,22 @@ export function useRemoveSubject() {
   return useMutation({
     mutationFn: ({ userId, subject }: { userId: string; subject: string }) =>
       api.admin.removeSubject(userId, subject),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateAccessKey() {
+  const invalidate = useInvalidateSignIns();
+  return useMutation({
+    mutationFn: ({
+      userId,
+      subject,
+      data,
+    }: {
+      userId: string;
+      subject: string;
+      data: AccessKeyUpdateRequest;
+    }) => api.admin.updateAccessKey(userId, subject, data),
     onSuccess: invalidate,
   });
 }

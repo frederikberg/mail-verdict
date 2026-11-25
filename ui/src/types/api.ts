@@ -345,6 +345,8 @@ export interface MeResponse {
   display_name: string;
   role: "admin" | "user";
   disabled: boolean;
+  /** What this sign-in may do; `full` is everything its user may. */
+  access: AccessSummary;
 }
 
 export interface StatsResponse {
@@ -1663,6 +1665,64 @@ export interface SignIn {
   revoked_at: string | null;
   /** The sign-in making this request. */
   current: boolean;
+}
+
+/** What an access key may do: `calendar:write` implies `calendar:read`,
+ * `contacts:write` implies `contacts:read`. */
+export type AccessScope =
+  | "calendar:read"
+  | "calendar:write"
+  | "contacts:read"
+  | "contacts:write";
+
+export type AccessMode = "full" | "scoped";
+
+/** `GET /api/me` `access`: a limit of null means every calendar or address book. */
+export interface AccessSummary {
+  mode: AccessMode;
+  scopes: string[];
+  calendar_write_ids: string[] | null;
+  addressbook_write_ids: string[] | null;
+}
+
+/** One access key (`GET /api/admin/access-keys`, `GET /api/me/access-keys`).
+ * The sign-in fields are null until the key has been used. */
+export interface AccessKey {
+  subject: string;
+  label: string | null;
+  user_id: string;
+  user_display_name: string;
+  access: AccessMode;
+  scopes: string[];
+  /** Writes only into these calendars; null: every calendar. */
+  calendar_write_ids: string[] | null;
+  /** Writes only into these address books; null: every address book. */
+  addressbook_write_ids: string[] | null;
+  created_at: string;
+  sign_in_id: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+  last_refusal_at: string | null;
+}
+
+/** `POST /api/admin/users/{id}/subjects`. */
+export interface AddSubjectRequest {
+  subject: string;
+  label?: string | null;
+  access: AccessMode;
+  scopes?: AccessScope[];
+  calendar_write_ids?: string[] | null;
+  addressbook_write_ids?: string[] | null;
+}
+
+/** `PATCH /api/admin/users/{id}/subjects/{subject}`: only the fields sent change. */
+export interface AccessKeyUpdateRequest {
+  label?: string | null;
+  access?: AccessMode;
+  scopes?: AccessScope[];
+  calendar_write_ids?: string[] | null;
+  addressbook_write_ids?: string[] | null;
 }
 
 export interface SignOutResponse {

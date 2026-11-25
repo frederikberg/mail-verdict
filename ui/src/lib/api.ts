@@ -14,6 +14,9 @@ import type {
   AccountUpdateRequest,
   AdminAccount,
   AdminRuleSet,
+  AccessKey,
+  AccessKeyUpdateRequest,
+  AddSubjectRequest,
   AdminUser,
   AdminUserCreateRequest,
   AdminUserUpdateRequest,
@@ -529,6 +532,9 @@ export const api = {
     revokeSignIn(id: string): Promise<SignIn> {
       return request(`/me/sign-ins/${id}/revoke`, { method: "POST" });
     },
+    accessKeys(): Promise<AccessKey[]> {
+      return request("/me/access-keys");
+    },
   },
 
   admin: {
@@ -578,10 +584,23 @@ export const api = {
     signOutUser(userId: string): Promise<SignOutResponse> {
       return request(`/admin/users/${userId}/sign-out`, { method: "POST" });
     },
-    addSubject(userId: string, subject: string): Promise<AdminUser> {
+    accessKeys(): Promise<AccessKey[]> {
+      return request("/admin/access-keys");
+    },
+    addSubject(userId: string, data: AddSubjectRequest): Promise<AdminUser> {
       return request(`/admin/users/${userId}/subjects`, {
         method: "POST",
-        body: JSON.stringify({ subject }),
+        body: JSON.stringify(data),
+      });
+    },
+    updateAccessKey(
+      userId: string,
+      subject: string,
+      data: AccessKeyUpdateRequest,
+    ): Promise<AccessKey> {
+      return request(`/admin/users/${userId}/subjects/${encodeURIComponent(subject)}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
       });
     },
     removeSubject(userId: string, subject: string): Promise<AdminUser> {

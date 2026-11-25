@@ -344,7 +344,7 @@ function AddSubjectDialog({ user, onClose }: { user: AdminUser; onClose: () => v
   const submit = () => {
     if (!subject.trim() || add.isPending) return;
     add.mutate(
-      { userId: user.id, subject: subject.trim() },
+      { userId: user.id, subject: subject.trim(), access: "full" },
       { onSuccess: onClose, onError: (err) => setError(errorText(err, "Could not add it")) },
     );
   };
@@ -355,8 +355,8 @@ function AddSubjectDialog({ user, onClose }: { user: AdminUser; onClose: () => v
           <DialogTitle>Add a sign-in subject</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Another login or machine user that signs in as {user.display_name}: the sub claim its
-          tokens carry.
+          Another login that signs in as {user.display_name}, with everything they may do: the sub
+          claim its tokens carry. A machine user with limited access is attached under Access keys.
         </p>
         <div className="grid gap-1.5">
           <Label htmlFor="add-subject">Subject</Label>
