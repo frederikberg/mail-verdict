@@ -1316,8 +1316,16 @@ A grant can also carry a limit on where a key may write: a list of calendars (or
 its writes are confined to, none meaning every one the user can write to. The handlers that write
 events and contacts ask the scope: creating, editing, moving into or deleting outside the limit is
 403 `collection_not_writable`. A scoped key also never causes scheduling mail: creating an event
-with attendees, or editing or deleting one that has attendees, is 403 `scope_forbids_scheduling`,
-since those paths send invitations, updates and cancellations from the user's own address.
+with attendees, or editing or deleting one that has attendees anywhere in it (the master or any
+overridden occurrence), is 403 `scope_forbids_scheduling`, since those paths send invitations,
+updates and cancellations from the user's own address, and a calendar server with its own
+scheduling engine may mail the guests itself. A key may not give a new event the `uid` of one it
+can see in another calendar (409 `uid_in_use`).
+
+A write scope comes with its write limit: giving a key `calendar:write` or `contacts:write` it
+did not hold before is refused (422 `calendar_limit_required`, `addressbook_limit_required`) unless
+the request names the limit, an explicit null meaning every collection. Otherwise a scope
+dropped and later given back would quietly unconfine the key.
 
 Two layers hold a key to its grant, independently of each other:
 
@@ -1351,9 +1359,12 @@ removing and signing out a key is written to `access_key_events`, which names it
 a foreign key so a removed key's history stays.
 
 A refused request is recorded as well (`alerts/access_key_refused.py`, called by both gates): one
-`refused` row per key, route and hour with the repeats counted in `detail.count`, ids in a path not
-told apart, and at most 50 rows an hour per key, after which further refusals only raise
-`detail.suppressed`. A key that suddenly asks for mail is the sign of a stolen credential, so the
+`refused` row per key, request and hour with the repeats counted in `detail.count`, and at most 50
+rows an hour per key, after which further refusals only raise `detail.suppressed`. The request is
+named by the route table entry it matched (`GET /api/contacts/{contact_id}`), a tool by its name
+when the server offers it, and anything else generically (`GET (unlisted route)`, `tool
+(unknown)`): the path and the tool name are the key holder's to choose, so neither is stored or
+shown, and the name is cut at 200 characters. A key that suddenly asks for mail is the sign of a stolen credential, so the
 key's user also gets an `access_key_refused` alert, once per key and day, through the ordinary
 alert and push path. Neither can turn the refusal into an error: a failure to record is logged and
 the request is refused anyway.

@@ -67,8 +67,8 @@ async def test_a_repeat_counts_on_the_same_row_and_another_route_gets_its_own(
     key = await _key(migrated_db)
 
     for _ in range(3):
-        await record_refusal(key, "GET /api/accounts", Refusal(None))
-    await record_refusal(key, "POST /api/calendar/events", Refusal("calendar:write"))
+        await record_refusal(key, Refusal(None, "GET /api/accounts"))
+    await record_refusal(key, Refusal("calendar:write", "POST /api/calendar/events"))
 
     assert await _events(migrated_db, key.subject) == [
         {"what": "GET /api/accounts", "scope": None, "count": 3},
@@ -77,17 +77,17 @@ async def test_a_repeat_counts_on_the_same_row_and_another_route_gets_its_own(
 
 
 @pytest.mark.asyncio
-async def test_ids_in_a_path_do_not_make_each_request_its_own_row(
+async def test_a_name_longer_than_the_bound_is_cut_before_it_is_stored_or_shown(
     migrated_db: DatabaseConnection,
 ) -> None:
     key = await _key(migrated_db)
 
-    await record_refusal(key, f"GET /api/messages/{uuid.uuid4()}", Refusal(None))
-    await record_refusal(key, f"GET /api/messages/{uuid.uuid4()}", Refusal(None))
+    await record_refusal(key, Refusal(None, "tool " + "x" * 5000))
 
-    assert await _events(migrated_db, key.subject) == [
-        {"what": "GET /api/messages/{id}", "scope": None, "count": 2},
-    ]
+    (event,) = await _events(migrated_db, key.subject)
+    (alert,) = await _alerts(migrated_db, key.subject)
+    assert len(event["what"]) == 200
+    assert len(alert.body) < 400
 
 
 @pytest.mark.asyncio
@@ -98,7 +98,7 @@ async def test_a_key_probing_many_routes_cannot_write_more_than_the_cap(
     key = await _key(migrated_db)
 
     for number in range(6):
-        await record_refusal(key, f"GET /api/probe-{number}", Refusal(None))
+        await record_refusal(key, Refusal(None, f"GET /api/probe-{number}"))
 
     events = await _events(migrated_db, key.subject)
     assert len(events) == 3
@@ -111,8 +111,8 @@ async def test_the_alert_goes_to_the_keys_user_once_a_day_and_names_the_key(
 ) -> None:
     key = await _key(migrated_db, label="Calendar sync")
 
-    await record_refusal(key, "GET /api/accounts", Refusal(None))
-    await record_refusal(key, "POST /api/outbox", Refusal(None))
+    await record_refusal(key, Refusal(None, "GET /api/accounts"))
+    await record_refusal(key, Refusal(None, "POST /api/outbox"))
 
     (alert,) = await _alerts(migrated_db, key.subject)
     assert alert.kind == "access_key_refused"
@@ -124,7 +124,7 @@ async def test_the_alert_goes_to_the_keys_user_once_a_day_and_names_the_key(
 async def test_an_unlabelled_key_is_named_by_its_subject(migrated_db: DatabaseConnection) -> None:
     key = await _key(migrated_db, label=None)
 
-    await record_refusal(key, "GET /api/accounts", Refusal(None))
+    await record_refusal(key, Refusal(None, "GET /api/accounts"))
 
     (alert,) = await _alerts(migrated_db, key.subject)
     assert key.subject in alert.body
@@ -139,4 +139,4 @@ async def test_a_failure_to_record_never_reaches_the_caller(
 
     monkeypatch.setattr(access_key_refused, "_record", broken)
 
-    await record_refusal(await _key(migrated_db), "GET /api/accounts", Refusal(None))
+    await record_refusal(await _key(migrated_db), Refusal(None, "GET /api/accounts"))

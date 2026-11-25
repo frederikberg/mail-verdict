@@ -175,3 +175,34 @@ async def test_a_scoped_subject_is_never_admin_whatever_its_users_role(user_id: 
 
     assert key.grant == grant and not key.is_admin
     assert login.grant is None and login.is_admin
+
+
+@pytest.mark.asyncio
+async def test_a_lookup_that_began_before_a_change_is_not_remembered() -> None:
+    """The row read before the commit must not outlive the forget() that
+    followed it, or a narrowed key keeps its old grant for the cache window."""
+    wide = Grant(frozenset({"calendar:write"}))
+    narrow = Grant(frozenset({"calendar:read"}))
+    user = uuid.uuid4()
+
+    class _Racing(_Directory):
+        resolver: PrincipalResolver
+
+        async def find(self, subject: str) -> _DirectoryEntry | None:
+            self.finds += 1
+            if self.finds > 1:
+                return _DirectoryEntry(user_id=user, role="user", disabled=False, grant=narrow)
+            # The change commits and the resolver is told while this read,
+            # which saw the old row, is still in flight.
+            self.resolver.forget(user)
+            return _DirectoryEntry(user_id=user, role="user", disabled=False, grant=wide)
+
+    directory = _Racing()
+    resolver = _resolver(directory)
+    directory.resolver = resolver
+
+    during = await resolver.resolve(_claims("key"))
+    after = await resolver.resolve(_claims("key"))
+
+    assert during.grant == wide
+    assert after.grant == narrow

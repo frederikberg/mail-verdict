@@ -237,6 +237,9 @@ class PrincipalResolver:
         self._auto_provision = auto_provision
         self._cache_seconds = cache_seconds
         self._cache: dict[str, tuple[float, Principal | AuthError]] = {}
+        # Bumped by forget(): a lookup that began before it holds what the
+        # database said before the change, and must not be remembered.
+        self._generation = 0
 
     async def resolve(self, claims: Mapping[str, Any]) -> Principal:
         """
@@ -251,14 +254,17 @@ class PrincipalResolver:
         if cached is not None and cached[0] > time.monotonic():
             outcome = cached[1]
         else:
+            generation = self._generation
             outcome = await self._lookup(subject, claims)
-            self._cache[subject] = (time.monotonic() + self._cache_seconds, outcome)
+            if generation == self._generation:
+                self._cache[subject] = (time.monotonic() + self._cache_seconds, outcome)
         if isinstance(outcome, AuthError):
             raise outcome
         return outcome
 
     def forget(self, user_id: uuid.UUID | None = None) -> None:
         """Drop remembered results -- one user's, or every one."""
+        self._generation += 1
         if user_id is None:
             self._cache.clear()
             return

@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import ColumnElement, and_, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -196,7 +196,22 @@ class DavObjectRepository:
         self, session: AsyncSession, collection_id: uuid.UUID, uid: str,
     ) -> DavObject | None:
         """The live event with this UID in one calendar, read in the caller's
-        session (a create holds a lock across this read and its insert).
+        session (a create holds a lock across this read and its insert)."""
+        return await self._find_live_event(session, DavObject.collection_id == collection_id, uid)
+
+    async def find_event_in_scope_by_uid(
+        self, session: AsyncSession, scope: Scope, uid: str,
+    ) -> DavObject | None:
+        """The live event with this UID in any calendar of the caller's DAV
+        accounts, read in the caller's session."""
+        return await self._find_live_event(
+            session, scope.dav_account_filter(DavObject.account_id), uid,
+        )
+
+    async def _find_live_event(
+        self, session: AsyncSession, where: ColumnElement[bool], uid: str,
+    ) -> DavObject | None:
+        """A live event with this UID among the rows `where` selects.
 
         A row just inserted has no parsed `uid` until PostIMAP's outbound
         processor has read it, so a row without one is matched by its own
@@ -204,7 +219,7 @@ class DavObjectRepository:
         rows = (
             await session.execute(
                 select(DavObject).where(
-                    DavObject.collection_id == collection_id,
+                    where,
                     DavObject.kind == "calendar",
                     DavObject.deleted_at.is_(None),
                     or_(

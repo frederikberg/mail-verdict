@@ -149,6 +149,14 @@ class Grant:
         return self.addressbook_write_ids is None or addressbook_id in self.addressbook_write_ids
 
 
+# What a refusal names when the request matched nothing listed: the path and
+# the tool name are chosen by whoever holds the key, so neither is ever
+# recorded or shown.
+UNLISTED_ROUTE = "(unlisted route)"
+UNKNOWN_TOOL = "tool (unknown)"
+_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
+
+
 @dataclass(frozen=True)
 class Refusal:
     """A request a grant does not cover.
@@ -156,9 +164,14 @@ class Refusal:
     Attributes:
         scope: The scope that would open it, or None when no scope does (a
             route for full access only, or one nobody listed).
+        what: How the request is named in the audit trail and the alert: a
+            listed route as its table entry ("GET /api/contacts/{contact_id}"),
+            a tool by its name when the server offers it, anything else
+            generically. Never text the caller chose.
     """
 
     scope: str | None
+    what: str = ""
 
 
 def grant_from_columns(
@@ -208,23 +221,22 @@ def check_fields(
     return held
 
 
-def _compile(table: dict[str, str]) -> list[tuple[str, re.Pattern[str], int, str]]:
+def _compile(table: dict[str, str]) -> list[tuple[str, re.Pattern[str], int, str, str]]:
     """Each "METHOD /path/{param}" key as (method, pattern, parameter count,
-    scope), the pattern built the way Starlette builds a route's own."""
+    scope, key), the pattern built the way Starlette builds a route's own."""
     compiled = []
     for key, scope in table.items():
         method, path = key.split(" ", 1)
         pattern, _, convertors = compile_path(path)
-        compiled.append((method, pattern, len(convertors), scope))
+        compiled.append((method, pattern, len(convertors), scope, key))
     return compiled
 
 
 _ROUTES = _compile(ROUTE_SCOPES)
 
 
-def listed_scope(method: str, path: str) -> str | None:
-    """
-    What ROUTE_SCOPES lists for a request, or None for a route nobody listed.
+def _listed(method: str, path: str) -> tuple[str, str] | None:
+    """(table entry, scope) for a request, or None for a route nobody listed.
 
     Where a path fits several listed patterns (`/contacts/search` also fits
     `/contacts/{contact_id}`), the one with the fewest parameters wins; if
@@ -232,46 +244,53 @@ def listed_scope(method: str, path: str) -> str | None:
     ambiguity closes rather than opens.
     """
     matches = [
-        (parameters, scope)
-        for route_method, pattern, parameters, scope in _ROUTES
+        (parameters, scope, key)
+        for route_method, pattern, parameters, scope, key in _ROUTES
         if route_method == method and pattern.match(path)
     ]
     if not matches:
         return None
-    fewest = min(parameters for parameters, _ in matches)
-    scopes = {scope for parameters, scope in matches if parameters == fewest}
-    return scopes.pop() if len(scopes) == 1 else None
+    fewest = min(parameters for parameters, _, _ in matches)
+    best = {(key, scope) for parameters, scope, key in matches if parameters == fewest}
+    return best.pop() if len(best) == 1 else None
+
+
+def listed_scope(method: str, path: str) -> str | None:
+    """What ROUTE_SCOPES lists for a request, or None for a route nobody listed."""
+    listed = _listed(method, path)
+    return None if listed is None else listed[1]
 
 
 def refusal_for_route(grant: Grant, method: str, path: str) -> Refusal | None:
     """Why `grant` may not call this request, or None when it may."""
-    scope = listed_scope(method, path)
-    if scope is None:
-        return Refusal(None)
+    listed = _listed(method, path)
+    if listed is None:
+        verb = method if method in _METHODS else "(other method)"
+        return Refusal(None, f"{verb} {UNLISTED_ROUTE}")
+    key, scope = listed
     if scope == ANY_KEY:
         return None
     if scope == MCP_TRANSPORT:
-        return None if grant.opens_any_tool() else Refusal(None)
-    return None if grant.holds(scope) else Refusal(scope)
+        return None if grant.opens_any_tool() else Refusal(None, key)
+    return None if grant.holds(scope) else Refusal(scope, key)
 
 
 def refusal_for_tool(grant: Grant, tool: str) -> Refusal | None:
     """Why `grant` may not see or call this MCP tool, or None when it may."""
     scope = TOOL_SCOPES.get(tool)
     if scope is None:
-        return Refusal(None)
-    return None if grant.holds(scope) else Refusal(scope)
+        return Refusal(None, UNKNOWN_TOOL)
+    return None if grant.holds(scope) else Refusal(scope, f"tool {tool}")
 
 
-async def report_refusal(principal: Principal, what: str, refusal: Refusal) -> None:
+async def report_refusal(principal: Principal, refusal: Refusal) -> None:
     """Record that a scoped key asked for something its grant does not cover:
     a log line, the audit trail and the user's alert
-    (alerts/access_key_refused.py). `what` names the route ("GET /api/mails")
-    or tool ("tool send_mail")."""
+    (alerts/access_key_refused.py), all naming the request as `refusal.what`."""
     from mail_verdict.alerts.access_key_refused import record_refusal
 
     logger.warning(
-        "Scoped key %s refused %s (needs %s)", principal.subject, what,
+        "Scoped key %s refused %s (needs %s)", principal.subject, refusal.what,
         refusal.scope or "full access",
     )
-    await record_refusal(principal, what, refusal)
+    await record_refusal(principal, refusal)

@@ -84,7 +84,9 @@ class AccessKeyUpdateRequest(BaseModel):
     """The fields of a key to change; the rest stay as they are.
 
     Switching `access` to `full` without naming scopes or limits clears them,
-    and dropping a write scope without naming its limit clears the limit.
+    and dropping a write scope without naming its limit clears the limit. A
+    write scope the key did not hold must come with its limit, null meaning
+    every collection.
     `label` and the write limits take null to clear them."""
 
     label: str | None = Field(default=None, min_length=1)
@@ -133,6 +135,37 @@ def check_grant(
         return check_fields(access, scopes, calendar_write_ids, addressbook_write_ids)
     except GrantInvalid as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def require_limits_named(
+    scopes: Sequence[str],
+    held_before: Sequence[str],
+    named: set[str],
+) -> None:
+    """Refuse (422 `calendar_limit_required` / `addressbook_limit_required`) a
+    write scope the key did not hold before when the request does not say where
+    it may write. An explicit null still means every collection, but it is
+    said, never reached by a scope coming back after the limit was cleared
+    with the scope that carried it.
+
+    Args:
+        scopes: The scopes the key ends up with.
+        held_before: The scopes it held before (none for a new key).
+        named: The fields the request names (`calendar_write_ids` and
+            `addressbook_write_ids` are the ones that matter).
+    """
+    if (
+        CALENDAR_WRITE in scopes
+        and CALENDAR_WRITE not in held_before
+        and "calendar_write_ids" not in named
+    ):
+        raise HTTPException(status_code=422, detail="calendar_limit_required")
+    if (
+        CONTACTS_WRITE in scopes
+        and CONTACTS_WRITE not in held_before
+        and "addressbook_write_ids" not in named
+    ):
+        raise HTTPException(status_code=422, detail="addressbook_limit_required")
 
 
 def grant_detail(
@@ -264,8 +297,10 @@ async def update_access_key(
     under the caller mid-request; 422 for a combination that cannot be
     stored (`unknown_scope`, `full_access_carries_no_scopes`,
     `calendar_limit_needs_calendar_write`,
-    `addressbook_limit_needs_contacts_write`) or a write limit naming a
-    collection that is not the user's own (`unknown_collection`)."""
+    `addressbook_limit_needs_contacts_write`), a write scope the key did not
+    hold before without saying where it may write (`calendar_limit_required`,
+    `addressbook_limit_required`; null names "every one"), or a write limit
+    naming a collection that is not the user's own (`unknown_collection`)."""
     fields = request.model_fields_set
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -299,6 +334,9 @@ async def update_access_key(
             addressbook_ids = None
 
         scopes = check_grant(access, scopes, calendar_ids, addressbook_ids)
+        require_limits_named(
+            scopes, list(identity.scopes) if identity.access == "scoped" else [], set(fields),
+        )
         await ensure_collections(
             session, user_id, "calendar",
             request.calendar_write_ids if "calendar_write_ids" in fields else None,

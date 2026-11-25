@@ -18,13 +18,20 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any
 
 from fastmcp.exceptions import PromptError, ResourceError, ToolError
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.tools.base import Tool, ToolResult
 
-from mail_verdict.auth.grants import Grant, Refusal, refusal_for_tool, report_refusal
+from mail_verdict.auth.grants import (
+    UNKNOWN_TOOL,
+    Grant,
+    Refusal,
+    refusal_for_tool,
+    report_refusal,
+)
 from mail_verdict.auth.principal import Principal, current_principal
 
 
@@ -44,7 +51,20 @@ def refusal_message(refusal: Refusal) -> str:
 
 
 class ScopedKeyMiddleware(Middleware):
-    """Limits a scoped access key to the tools its grant holds."""
+    """Limits a scoped access key to the tools its grant holds.
+
+    `server` is asked which tools exist, so a refused call to a real tool is
+    recorded under its name and a call to a name the server does not offer
+    under no name at all: the name is the caller's to choose."""
+
+    def __init__(self, server: Any) -> None:
+        self._server = server
+
+    async def _served(self, name: str) -> bool:
+        """Whether the server offers a tool of this name."""
+        return any(
+            tool.name == name for tool in await self._server.list_tools(run_middleware=False)
+        )
 
     async def on_list_tools(
         self, context: MiddlewareContext[Any], call_next: Any,
@@ -65,7 +85,9 @@ class ScopedKeyMiddleware(Middleware):
             name = context.message.name
             refusal = refusal_for_tool(grant, name)
             if refusal is not None:
-                await report_refusal(principal, f"tool {name}", refusal)
+                if refusal.what == UNKNOWN_TOOL and await self._served(name):
+                    refusal = replace(refusal, what=f"tool {name}")
+                await report_refusal(principal, refusal)
                 raise ToolError(refusal_message(refusal))
         result: ToolResult = await call_next(context)
         return result
@@ -84,13 +106,13 @@ class ScopedKeyMiddleware(Middleware):
     async def on_read_resource(self, context: MiddlewareContext[Any], call_next: Any) -> Any:
         scoped = _scoped()
         if scoped is not None:
-            await report_refusal(scoped[0], "resource read", Refusal(None))
+            await report_refusal(scoped[0], Refusal(None, "resource read"))
             raise ResourceError(refusal_message(Refusal(None)))
         return await call_next(context)
 
     async def on_get_prompt(self, context: MiddlewareContext[Any], call_next: Any) -> Any:
         scoped = _scoped()
         if scoped is not None:
-            await report_refusal(scoped[0], "prompt read", Refusal(None))
+            await report_refusal(scoped[0], Refusal(None, "prompt read"))
             raise PromptError(refusal_message(Refusal(None)))
         return await call_next(context)

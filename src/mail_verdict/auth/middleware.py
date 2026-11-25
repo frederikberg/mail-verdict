@@ -89,7 +89,7 @@ class AuthMiddleware:
             path = scope["path"]
             refusal = refusal_for_route(principal.grant, scope["method"], path)
             if refusal is not None:
-                await report_refusal(principal, f"{scope['method']} {path}", refusal)
+                await report_refusal(principal, refusal)
                 await _refuse_scope(send, refusal)
                 return
 

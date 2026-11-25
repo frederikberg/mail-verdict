@@ -167,7 +167,7 @@ def test_what_an_admin_changes_takes_effect_on_the_next_request(keys: Keys) -> N
     assert narrowed.status_code == 200, narrowed.text
     assert _refusal(keys.get(key, "/api/calendars"), "calendar:read")
 
-    widened = keys.change(key, scopes=["contacts:write"])
+    widened = keys.change(key, scopes=["contacts:write"], addressbook_write_ids=None)
     assert widened.status_code == 200
     assert keys.get(key, "/api/contacts").status_code == 200
     assert _refusal(keys.get(key, "/api/calendars"), "calendar:read")
@@ -178,7 +178,9 @@ def test_what_an_admin_changes_takes_effect_on_the_next_request(keys: Keys) -> N
 
 
 def test_a_key_over_mcp_sees_and_calls_only_the_tools_its_scopes_hold(keys: Keys) -> None:
-    key = keys.attach(access="scoped", scopes=["calendar:read", "contacts:write"])
+    key = keys.attach(
+        access="scoped", scopes=["calendar:read", "contacts:write"], addressbook_write_ids=None,
+    )
     session = McpHttpSession(keys.client, "/mcp/", keys.headers(key))
 
     listed = session.list_tools(keys.headers(key))["result"]["tools"]
@@ -289,7 +291,7 @@ def test_creating_changing_and_removing_a_key_leave_a_trail_that_outlives_it(
     keys: Keys, app_client: TestClient, postgres_url: str,
 ) -> None:
     key = keys.attach(label="Trail", access="scoped", scopes=["calendar:read"])
-    keys.change(key, scopes=["calendar:write"])
+    keys.change(key, scopes=["calendar:write"], calendar_write_ids=None)
     removed = app_client.delete(f"/api/admin/users/{OWNER}/subjects/{key}")
     assert removed.status_code == 200
 
@@ -324,7 +326,7 @@ def test_a_refused_key_is_audited_and_its_user_is_alerted(
         {"s": key},
     )
     assert [(row.detail["what"], row.detail["count"]) for row in refused] == [
-        ("GET /api/accounts", 2),
+        ("GET (unlisted route)", 2),
     ]
     alerts = [
         a for a in app_client.get("/api/alerts").json() if a["kind"] == "access_key_refused"
@@ -381,3 +383,40 @@ def test_a_key_over_mcp_creates_an_event_once_per_uid_and_never_one_with_attende
     created, replayed = (json.loads(r["content"][0]["text"]) for r in (first, again))
     assert created["object_id"] == replayed["object_id"] and created["uid"] == arguments["uid"]
     assert json.loads(invited["content"][0]["text"]) == {"error": "scope_forbids_scheduling"}
+
+
+def test_a_write_scope_must_say_where_it_may_write(keys: Keys) -> None:
+    for scope, detail in (
+        ("calendar:write", "calendar_limit_required"),
+        ("contacts:write", "addressbook_limit_required"),
+    ):
+        refused = keys.client.post(
+            f"/api/admin/users/{OWNER}/subjects",
+            json={"subject": f"x-{uuid.uuid4()}", "access": "scoped", "scopes": [scope]},
+        )
+        assert refused.status_code == 422 and refused.json() == {"detail": detail}
+
+    everywhere = keys.attach(
+        access="scoped", scopes=["calendar:write"], calendar_write_ids=None,
+    )
+    assert keys.get(everywhere, "/api/me").json()["access"]["calendar_write_ids"] is None
+
+
+def test_giving_a_write_scope_back_does_not_quietly_unconfine_the_key(
+    keys: Keys, calendar: dict[str, Any],
+) -> None:
+    key = keys.attach(
+        access="scoped", scopes=["calendar:write"], calendar_write_ids=[calendar["id"]],
+    )
+    assert keys.change(key, scopes=["calendar:read"]).status_code == 200
+
+    back = keys.change(key, scopes=["calendar:write"])
+    renamed = keys.change(key, label="Renamed")
+    limited = keys.change(key, scopes=["calendar:write"], calendar_write_ids=[calendar["id"]])
+
+    assert back.status_code == 422 and back.json() == {"detail": "calendar_limit_required"}
+    assert renamed.status_code == 200
+    assert limited.status_code == 200
+    assert limited.json()["calendar_write_ids"] == [calendar["id"]]
+    # Keeping a write scope it already holds needs no limit to be named again.
+    assert keys.change(key, label="Again").status_code == 200

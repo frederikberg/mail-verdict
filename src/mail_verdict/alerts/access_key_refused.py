@@ -17,7 +17,7 @@ becomes the answer to the request.
 from __future__ import annotations
 
 import logging
-import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -32,6 +32,8 @@ from mail_verdict.database.repository import AlertRepository
 from mail_verdict.push.vapid import get_vapid_key_repo
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from mail_verdict.auth.grants import Refusal
     from mail_verdict.auth.principal import Principal
 
@@ -40,21 +42,24 @@ logger = logging.getLogger(__name__)
 ALERT_KIND = "access_key_refused"
 MAX_ROWS_PER_HOUR = 50
 _WINDOW = timedelta(hours=1)
-_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+MAX_WHAT_LENGTH = 200
 
 
-def _generalised(what: str) -> str:
-    """A request as one entry of the trail: ids in the path are not told apart."""
-    return _UUID.sub("{id}", what)
-
-
-async def record_refusal(principal: Principal, what: str, refusal: Refusal) -> None:
+async def record_refusal(principal: Principal, refusal: Refusal) -> None:
     """Write the audit row and raise the day's alert for one refusal. Never
     raises: the request is refused whether or not this works."""
     try:
-        await _record(principal, _generalised(what), refusal)
+        await _record(principal, refusal.what[:MAX_WHAT_LENGTH], refusal)
     except Exception:
         logger.exception("Could not record a refused access key request")
+
+
+async def _bump(session: AsyncSession, event_id: uuid.UUID, counter: str) -> None:
+    """Add one to a counter of an event's detail."""
+    event = await session.get(AccessKeyEvent, event_id)
+    assert event is not None
+    start = 1 if counter == "count" else 0
+    event.detail = {**event.detail, counter: event.detail.get(counter, start) + 1}
 
 
 async def _record(principal: Principal, what: str, refusal: Refusal) -> None:
@@ -67,7 +72,7 @@ async def _record(principal: Principal, what: str, refusal: Refusal) -> None:
         )
         recent = (
             await session.execute(
-                select(AccessKeyEvent)
+                select(AccessKeyEvent.id, AccessKeyEvent.detail["what"].as_string())
                 .where(
                     AccessKeyEvent.subject == principal.subject,
                     AccessKeyEvent.kind == "refused",
@@ -75,13 +80,12 @@ async def _record(principal: Principal, what: str, refusal: Refusal) -> None:
                 )
                 .order_by(AccessKeyEvent.at.desc())
             )
-        ).scalars().all()
-        same = next((row for row in recent if row.detail.get("what") == what), None)
+        ).all()
+        same = next((row.id for row in recent if row[1] == what), None)
         if same is not None:
-            same.detail = {**same.detail, "count": same.detail.get("count", 1) + 1}
+            await _bump(session, same, "count")
         elif len(recent) >= MAX_ROWS_PER_HOUR:
-            newest = recent[0]
-            newest.detail = {**newest.detail, "suppressed": newest.detail.get("suppressed", 0) + 1}
+            await _bump(session, recent[0].id, "suppressed")
         else:
             record_access_key_event(
                 session, principal.subject, principal.user_id, "refused",

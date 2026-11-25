@@ -4,7 +4,8 @@ A subject is `full` (everything its user may do, which every existing row
 stays) or `scoped` to a list of scopes, optionally with the collections its
 writes are confined to. `label` names an access key in the list. The audit
 trail has no foreign key onto a subject, so the history of a removed key
-stays; its rows go with their user.
+stays; its rows go with their user. The downgrade refuses while a scoped key
+exists.
 
 Revision ID: 0058_access_grants
 Revises: 0057_push_sign_in
@@ -74,6 +75,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # The previous release resolves a subject by its row alone, so a scoped
+    # key left behind would sign in as its user with everything that user may do.
+    scoped = op.get_bind().execute(
+        sa.text("SELECT count(*) FROM user_identities WHERE access = 'scoped'")
+    ).scalar_one()
+    if scoped:
+        raise RuntimeError(
+            f"{scoped} scoped access key(s) exist; remove them before downgrading, "
+            "or the previous release would sign them in with full access"
+        )
     op.drop_index("ix_access_key_events_user_id", table_name="access_key_events")
     op.drop_index("ix_access_key_events_subject_at", table_name="access_key_events")
     op.drop_table("access_key_events")

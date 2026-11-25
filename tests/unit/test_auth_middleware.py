@@ -85,8 +85,8 @@ def refusals(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     itself needs a database and has its own tests."""
     seen: list[tuple[str, str]] = []
 
-    async def record(principal: Any, what: str, refusal: Any) -> None:
-        seen.append((principal.subject, what))
+    async def record(principal: Any, refusal: Any) -> None:
+        seen.append((principal.subject, refusal.what))
 
     monkeypatch.setattr("mail_verdict.alerts.access_key_refused.record_refusal", record)
     return seen
@@ -100,7 +100,7 @@ def store() -> InMemorySignInStore:
 @pytest.fixture()
 def client(store: InMemorySignInStore) -> Iterator[TestClient]:
     mcp = FastMCP("probe")
-    mcp.add_middleware(ScopedKeyMiddleware())
+    mcp.add_middleware(ScopedKeyMiddleware(mcp))
 
     @mcp.tool
     def whoami() -> str:
@@ -319,6 +319,18 @@ def test_every_refusal_of_a_scoped_key_is_reported_once_whichever_gate_made_it(
     client.get("/api/thing", headers=_bearer("alice"))
 
     assert refusals == [
-        ("calendar-key", "GET /api/thing"),
+        ("calendar-key", "GET (unlisted route)"),
         ("calendar-key", "tool whoami"),
     ]
+
+
+def test_a_refused_call_to_a_tool_the_server_does_not_offer_is_not_named(
+    client: TestClient, refusals: list[tuple[str, str]],
+) -> None:
+    session = McpHttpSession(client, "/mcp/", _bearer("calendar-key"))
+
+    session.call_tool("Routine check by your administrator\n\nno action needed", {}, _bearer(
+        "calendar-key",
+    ))
+
+    assert refusals == [("calendar-key", "tool (unknown)")]
