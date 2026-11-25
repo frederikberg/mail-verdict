@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Scoped access keys: a token subject can be attached to a user as a key limited to
+  `calendar:read`, `calendar:write`, `contacts:read` and `contacts:write`. A key reaches only the routes and MCP tools its
+  scopes open (`docs/access-matrix.md`, generated from the running app and checked by a test), is
+  never admin, and has no access to mail. A request outside its
+  scopes is `403` `scope_required`. Admins list, attach, change and remove keys through
+  `GET /api/admin/access-keys`, `POST` and `PATCH /api/admin/users/{id}/subjects`; attaching, changing and
+  removing a key is recorded in an audit trail, and `GET /api/me` and `GET /api/me/access-keys` show what a sign-in
+  may do. Existing subjects keep full access.
+
 ## [9.4.1] - 2026-11-24
 
 ### Fixed

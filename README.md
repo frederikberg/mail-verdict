@@ -206,6 +206,13 @@ they sign in again at the identity provider. Telling one phone from another reli
 shapes its access tokens (`auth.native_sign_in_handle`); with another identity provider, phones are
 listed one per person.
 
+A machine client does not have to be as powerful as the person it signs in as. An admin attaches
+its subject to a user as an *access key* limited to scopes: `calendar:read`, `calendar:write`,
+`contacts:read` and `contacts:write`. A scoped key never reaches mail, settings, accounts, secrets
+or any admin route, and is never admin whatever its user is; everything it may reach is listed in
+[`docs/access-matrix.md`](docs/access-matrix.md), and a route nobody opened for scoped keys stays
+closed to them. Attaching, narrowing, widening and removing a key takes effect within `auth.principal_cache_seconds`.
+
 Several people can share one instance. Each person sees only the mail, calendars and contacts of
 the accounts they added. The owner is the first admin and owns whatever existed before there were
 users; `auth.owner_subjects` signs them in on a new instance, and after that their subjects are

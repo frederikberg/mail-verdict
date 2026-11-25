@@ -14,8 +14,9 @@ Two layers enforce it, independently:
    questions are answered from one table each (ROUTE_SCOPES, TOOL_SCOPES) and
    both are default-deny: a route or tool nobody listed is closed to every
    scoped key, so forgetting one closes it rather than opening it.
-2. The data scope (Scope.for_principal) is emptied for the resources a key
-   holds no scope for, so a route the table got wrong still finds no rows.
+2. The data scope (Scope.for_principal) is emptied of the accounts a key holds
+   no scope for, so a route the table got wrong still finds no mail or DAV
+   data there (rows keyed by user instead of account rely on the table).
 
 docs/access-matrix.md is generated from the two tables and the served app
 (scripts/export_access_matrix.py); tests/unit/test_access_matrix.py fails

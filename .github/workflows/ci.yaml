@@ -47,6 +47,8 @@ jobs:
               - 'alembic.ini'
               - 'config/**'
               - 'scripts/export_api_contract.py'
+              - 'scripts/export_access_matrix.py'
+              - 'docs/access-matrix.md'
               - 'docs/api-contract/**'
               - '.github/workflows/ci.yaml'
             ui:
