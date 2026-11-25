@@ -565,6 +565,7 @@ async def create_contact(
     if collection is None or collection.kind != "addressbook":
         raise HTTPException(status_code=404, detail="Address book not found")
     scope.require_dav_account(collection.account_id)
+    scope.require_addressbook_write(request.addressbook_id)
 
     data = vcard.build_contact(
         summary=request.summary,
@@ -600,6 +601,7 @@ async def update_contact(
     if obj is None or obj.deleted_at is not None or obj.kind != "addressbook":
         raise HTTPException(status_code=404, detail="Contact not found")
     scope.require_dav_account(obj.account_id)
+    scope.require_addressbook_write(obj.collection_id)
 
     values = request.model_dump(exclude_unset=True)
     emails = None
@@ -648,5 +650,6 @@ async def delete_contact(contact_id: uuid.UUID, scope: Scope = Depends(current_s
     if obj is None or obj.deleted_at is not None or obj.kind != "addressbook":
         raise HTTPException(status_code=404, detail="Contact not found")
     scope.require_dav_account(obj.account_id)
+    scope.require_addressbook_write(obj.collection_id)
     async with db.session() as session:
         await delete_object(session, contact_id)

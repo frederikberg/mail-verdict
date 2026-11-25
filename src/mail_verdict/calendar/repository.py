@@ -20,6 +20,7 @@ from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from mail_verdict.calendar import ical
 from mail_verdict.database.models import (
     CalendarIntake,
     CalendarLinksRevision,
@@ -190,6 +191,41 @@ class DavObjectRepository:
                 )
             )
             return result.scalar_one_or_none()
+
+    async def find_in_collection_by_uid(
+        self, session: AsyncSession, collection_id: uuid.UUID, uid: str,
+    ) -> DavObject | None:
+        """The live event with this UID in one calendar, read in the caller's
+        session (a create holds a lock across this read and its insert).
+
+        A row just inserted has no parsed `uid` until PostIMAP's outbound
+        processor has read it, so a row without one is matched by its own
+        text, and kept only if its UID property really is `uid`."""
+        rows = (
+            await session.execute(
+                select(DavObject).where(
+                    DavObject.collection_id == collection_id,
+                    DavObject.kind == "calendar",
+                    DavObject.deleted_at.is_(None),
+                    or_(
+                        DavObject.uid == uid,
+                        and_(
+                            DavObject.uid.is_(None),
+                            DavObject.data.contains(uid, autoescape=True),
+                        ),
+                    ),
+                )
+            )
+        ).scalars().all()
+        for row in rows:
+            if row.uid == uid:
+                return row
+            try:
+                if ical.get_uid(row.data) == uid:
+                    return row
+            except ValueError:
+                continue
+        return None
 
     async def find_by_uid_in_scope(self, uid: str, scope: Scope) -> DavObject | None:
         """A UID already held in a dav_objects row of any of the caller's

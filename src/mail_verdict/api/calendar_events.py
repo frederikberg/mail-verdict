@@ -45,8 +45,8 @@ import uuid
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mail_verdict.api.deps import current_scope
@@ -555,11 +555,18 @@ async def get_event(
 
 @router.post("", response_model=EventInstanceOut, status_code=201)
 async def create_event(
-    request: EventCreateRequest, scope: Scope = Depends(current_scope),
+    request: EventCreateRequest,
+    scope: Scope = Depends(current_scope),
+    response: Response = None,  # type: ignore[assignment]
 ) -> EventInstanceOut:
     """Create an event. With attendees, the calendar needs a linked
     identity -- MailVerdict sends the invitations itself over its outbox
-    rather than leaving the server's own scheduling engine to do it."""
+    rather than leaving the server's own scheduling engine to do it.
+
+    With a `uid` the create is idempotent per calendar: an event already
+    holding that uid is answered as it is, with 200 instead of 201 and
+    nothing sent or changed, so a retry never makes a second one. `response`
+    is filled in by FastAPI; a direct call (the MCP tool) leaves it out."""
     await _require_support()
     db = get_db_connection()
     collection_repo = CollectionRepository(db)
@@ -567,6 +574,9 @@ async def create_event(
     if collection is None or collection.kind != "calendar":
         raise HTTPException(status_code=404, detail="Calendar not found")
     scope.require_dav_account(collection.account_id)
+    scope.require_calendar_write(request.calendar_id)
+    if request.attendees:
+        scope.forbid_scheduling()
 
     organizer_email = None
     organizer_identity: Identity | None = None
@@ -587,11 +597,34 @@ async def create_event(
             organizer_cn=organizer_identity.display_name if organizer_identity else None,
             attendees=[(a.email, a.cn) for a in request.attendees] if request.attendees else None,
             reminders=_reminders_in(request.reminders), transparency=request.transparency,
+            uid=request.uid,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     async with db.session() as session:
+        if request.uid is not None:
+            # One create at a time per calendar and uid, so a retry racing
+            # the first request finds its row instead of inserting a twin
+            # the server would refuse.
+            await session.execute(
+                text(
+                    "SELECT pg_advisory_xact_lock(hashtext('calendar_event_uid'), hashtext(:key))"
+                ),
+                {"key": f"{request.calendar_id}:{request.uid}"},
+            )
+            existing = await DavObjectRepository(db).find_in_collection_by_uid(
+                session, request.calendar_id, request.uid,
+            )
+            if existing is not None:
+                existing_master, _ = ical.parse_master_and_exceptions(existing.data)
+                if response is not None:
+                    response.status_code = 200
+                return await _to_instance(
+                    existing_master, existing, own_identity_email=None,
+                    read_only=collection.read_only, sync_error=None,
+                    reply_repo=CalendarReplyRepository(db),
+                )
         obj = await create_object(
             session, dav_account_id=collection.account_id,
             collection_id=request.calendar_id, data=data,
@@ -667,6 +700,7 @@ async def update_event(
     if obj is None or obj.deleted_at is not None or obj.kind != "calendar":
         raise HTTPException(status_code=404, detail="Event not found")
     scope.require_dav_account(obj.account_id)
+    scope.require_calendar_write(obj.collection_id)
 
     collection_repo = CollectionRepository(db)
     collection = await collection_repo.get_by_id(obj.collection_id)
@@ -678,6 +712,7 @@ async def update_event(
         if target is None or target.deleted_at is not None or target.kind != "calendar":
             raise HTTPException(status_code=404, detail="Calendar not found")
         scope.require_dav_account(target.account_id)
+        scope.require_calendar_write(request.calendar_id)
 
     if request.recurrence_id is not None and request.scope != "this":
         raise HTTPException(
@@ -685,6 +720,9 @@ async def update_event(
         )
 
     current_master, _ = ical.parse_master_and_exceptions(obj.data)
+    if current_master.attendees:
+        # An edit would owe the attendees an update, which a key never sends.
+        scope.forbid_scheduling()
     prefs = await CalendarPrefsRepository(db).get(obj.collection_id)
     identity_email = None
     organizer_identity: Identity | None = None
@@ -790,8 +828,12 @@ async def delete_event(
     if obj is None or obj.deleted_at is not None or obj.kind != "calendar":
         raise HTTPException(status_code=404, detail="Event not found")
     scope.require_dav_account(obj.account_id)
+    scope.require_calendar_write(obj.collection_id)
 
     master, _ = ical.parse_master_and_exceptions(obj.data)
+    if master.attendees:
+        # A delete would owe the attendees a cancellation, which a key never sends.
+        scope.forbid_scheduling()
     prefs = await CalendarPrefsRepository(db).get(obj.collection_id)
     organizer_identity: Identity | None = None
     if prefs is not None and prefs.identity_id is not None and master.organizer:

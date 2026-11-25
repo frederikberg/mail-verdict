@@ -3562,6 +3562,20 @@
               }
             ],
             "title": "Tz"
+          },
+          "uid": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._@:+=-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uid"
           }
         },
         "required": [
@@ -13234,7 +13248,7 @@
         ]
       },
       "post": {
-        "description": "Create an event. With attendees, the calendar needs a linked\nidentity -- MailVerdict sends the invitations itself over its outbox\nrather than leaving the server's own scheduling engine to do it.",
+        "description": "Create an event. With attendees, the calendar needs a linked\nidentity -- MailVerdict sends the invitations itself over its outbox\nrather than leaving the server's own scheduling engine to do it.\n\nWith a `uid` the create is idempotent per calendar: an event already\nholding that uid is answered as it is, with 200 instead of 201 and\nnothing sent or changed, so a retry never makes a second one. `response`\nis filled in by FastAPI; a direct call (the MCP tool) leaves it out.",
         "operationId": "create_event_calendar_events_post",
         "requestBody": {
           "content": {
