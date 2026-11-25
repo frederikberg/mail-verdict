@@ -382,7 +382,7 @@ async def remove_subject(
             detail={"reason": "removed"},
         )
         user_changed_on_commit(session)
-    await revoke_sign_ins(SignIn.subject == subject, SignIn.kind != "browser")
+    await revoke_sign_ins(SignIn.subject == subject, SignIn.kind != "browser", audit=False)
     resolver = get_principal_resolver()
     if resolver is not None:
         resolver.forget()

@@ -79,6 +79,19 @@ def _whoami(request: Request) -> JSONResponse:
     return JSONResponse({"user_id": str(principal.user_id) if principal else None})
 
 
+@pytest.fixture(autouse=True)
+def refusals(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """What the gates reported as refused: (subject, what). The recording
+    itself needs a database and has its own tests."""
+    seen: list[tuple[str, str]] = []
+
+    async def record(principal: Any, what: str, refusal: Any) -> None:
+        seen.append((principal.subject, what))
+
+    monkeypatch.setattr("mail_verdict.alerts.access_key_refused.record_refusal", record)
+    return seen
+
+
 @pytest.fixture()
 def store() -> InMemorySignInStore:
     return InMemorySignInStore()
@@ -293,3 +306,19 @@ def test_a_key_holding_no_tool_scope_cannot_even_reach_the_mcp_endpoint(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "scope_required"
+
+
+def test_every_refusal_of_a_scoped_key_is_reported_once_whichever_gate_made_it(
+    client: TestClient, refusals: list[tuple[str, str]],
+) -> None:
+    client.get("/api/calendars", headers=_bearer("calendar-key"))
+    client.get("/api/thing", headers=_bearer("calendar-key"))
+    session = McpHttpSession(client, "/mcp/", _bearer("calendar-key"))
+    session.call_tool("list_events", {}, _bearer("calendar-key"))
+    session.call_tool("whoami", {}, _bearer("calendar-key"))
+    client.get("/api/thing", headers=_bearer("alice"))
+
+    assert refusals == [
+        ("calendar-key", "GET /api/thing"),
+        ("calendar-key", "tool whoami"),
+    ]

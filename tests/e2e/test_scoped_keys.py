@@ -299,3 +299,85 @@ def test_creating_changing_and_removing_a_key_leave_a_trail_that_outlives_it(
     assert events[0][1]["scopes"] == ["calendar:read"]
     assert events[1][1]["before"]["scopes"] == ["calendar:read"]
     assert events[1][1]["after"]["scopes"] == ["calendar:write"]
+
+
+async def _rows(postgres_url: str, query: str, params: dict[str, Any]) -> list[Any]:
+    engine = create_async_engine(postgres_url)
+    try:
+        async with engine.begin() as conn:
+            return list((await conn.execute(text(query), params)).all())
+    finally:
+        await engine.dispose()
+
+
+def test_a_refused_key_is_audited_and_its_user_is_alerted(
+    keys: Keys, app_client: TestClient, postgres_url: str,
+) -> None:
+    key = keys.attach(label="Probe", access="scoped", scopes=["calendar:read"])
+
+    for _ in range(2):
+        assert _refusal(keys.get(key, "/api/accounts"), None)
+
+    refused = app_client.portal.call(
+        _rows, postgres_url,
+        "SELECT detail FROM access_key_events WHERE subject = :s AND kind = 'refused'",
+        {"s": key},
+    )
+    assert [(row.detail["what"], row.detail["count"]) for row in refused] == [
+        ("GET /api/accounts", 2),
+    ]
+    alerts = [
+        a for a in app_client.get("/api/alerts").json() if a["kind"] == "access_key_refused"
+    ]
+    assert len([a for a in alerts if "Probe" in (a["body"] or "")]) == 1
+    listed = next(
+        k for k in app_client.get("/api/admin/access-keys").json() if k["subject"] == key
+    )
+    assert listed["last_refusal_at"] is not None
+
+
+def test_signing_a_key_out_is_audited_and_refuses_it_from_then_on(
+    keys: Keys, app_client: TestClient, postgres_url: str,
+) -> None:
+    key = keys.attach(access="scoped", scopes=["calendar:read"])
+    keys.get(key, "/api/me")
+    sign_in = next(
+        k for k in app_client.get("/api/admin/access-keys").json() if k["subject"] == key
+    )["sign_in_id"]
+
+    revoked = app_client.post(f"/api/admin/sign-ins/{sign_in}/revoke")
+
+    assert revoked.status_code == 200
+    assert keys.get(key, "/api/me").status_code == 401
+    rows = app_client.portal.call(
+        _rows, postgres_url,
+        "SELECT detail, actor_user_id FROM access_key_events "
+        "WHERE subject = :s AND kind = 'revoked'",
+        {"s": key},
+    )
+    assert [(r.detail["reason"], str(r.actor_user_id)) for r in rows] == [("signed_out", OWNER)]
+
+
+def test_a_key_over_mcp_creates_an_event_once_per_uid_and_never_one_with_attendees(
+    keys: Keys, calendar: dict[str, Any],
+) -> None:
+    key = keys.attach(
+        access="scoped", scopes=["calendar:write"], calendar_write_ids=[calendar["id"]],
+    )
+    session = McpHttpSession(keys.client, "/mcp/", keys.headers(key))
+    arguments = {
+        "calendar_id": calendar["id"], "summary": "Projected", "uid": f"todo-{uuid.uuid4()}",
+        "dtstart": "2026-09-10T10:00:00Z", "dtend": "2026-09-10T11:00:00Z",
+    }
+
+    first = session.call_tool("create_event", arguments, keys.headers(key))["result"]
+    again = session.call_tool("create_event", arguments, keys.headers(key))["result"]
+    invited = session.call_tool(
+        "create_event", {**arguments, "uid": "other", "attendee_emails": ["a@example.com"]},
+        keys.headers(key),
+    )["result"]
+
+    assert not first.get("isError") and not again.get("isError")
+    created, replayed = (json.loads(r["content"][0]["text"]) for r in (first, again))
+    assert created["object_id"] == replayed["object_id"] and created["uid"] == arguments["uid"]
+    assert json.loads(invited["content"][0]["text"]) == {"error": "scope_forbids_scheduling"}
