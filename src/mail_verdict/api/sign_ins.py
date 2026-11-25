@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from sqlalchemy import ColumnElement, delete, func, select, update
 
 from mail_verdict.api.deps import require_admin, require_principal
+from mail_verdict.auth.access_events import record_access_key_event
 from mail_verdict.auth.ownership import user_changed_on_commit
 from mail_verdict.auth.principal import Principal
 from mail_verdict.auth.sign_ins import get_sign_in_registry
@@ -79,12 +80,20 @@ async def _list(principal: Principal, *conditions: ColumnElement[bool]) -> list[
     return [_response(row, principal) for row in rows]
 
 
-async def revoke_sign_ins(*conditions: ColumnElement[bool]) -> int:
+async def revoke_sign_ins(
+    *conditions: ColumnElement[bool],
+    actor_user_id: uuid.UUID | None = None,
+    audit: bool = True,
+) -> int:
     """
     Revoke every unrevoked sign-in matching `conditions`, delete the push
     subscriptions registered under them -- a revoked phone or browser stops
     receiving notifications, whatever its push service would still accept --
     end their open event streams and drop what this replica remembers.
+
+    A revoked machine client is an access key signed out, which goes into the
+    key's audit trail (`revoked`, reason `signed_out`, by `actor_user_id`)
+    unless the caller records its own reason (`audit=False`).
 
     Returns:
         How many were revoked.
@@ -99,6 +108,19 @@ async def revoke_sign_ins(*conditions: ColumnElement[bool]) -> int:
             )
         ).scalars().all()
         revoked = len(revoked_ids)
+        if revoked and audit:
+            for sign_in in (
+                await session.execute(
+                    select(SignIn.id, SignIn.subject, SignIn.user_id).where(
+                        SignIn.id.in_(revoked_ids), SignIn.kind == "machine",
+                    )
+                )
+            ).all():
+                record_access_key_event(
+                    session, sign_in.subject, sign_in.user_id, "revoked",
+                    actor_user_id=actor_user_id,
+                    detail={"reason": "signed_out", "sign_in_id": str(sign_in.id)},
+                )
         if revoked:
             await session.execute(
                 delete(PushSubscription).where(PushSubscription.sign_in_id.in_(revoked_ids))
@@ -117,7 +139,7 @@ async def _revoke_one(sign_in_id: uuid.UUID, principal: Principal, *, own: bool)
             raise HTTPException(status_code=404, detail="Sign-in not found")
         if own and row.user_id != principal.user_id:
             raise HTTPException(status_code=403, detail="Not your sign-in")
-    await revoke_sign_ins(SignIn.id == sign_in_id)
+    await revoke_sign_ins(SignIn.id == sign_in_id, actor_user_id=principal.user_id)
     async with get_db_connection().session() as session:
         row = await session.get(SignIn, sign_in_id)
         assert row is not None
@@ -187,11 +209,15 @@ async def revoke_sign_in(
 
 
 @admin_router.post("/users/{user_id}/sign-out", response_model=SignOutResponse)
-async def sign_out_user(user_id: uuid.UUID) -> SignOutResponse:
+async def sign_out_user(
+    user_id: uuid.UUID, principal: Principal = Depends(require_principal),
+) -> SignOutResponse:
     """Revoke every sign-in of a user: their phones, their browsers and
     their machine clients. Their phones and browsers can sign in again; a
     machine client's subject stays refused."""
     async with get_db_connection().session() as session:
         if await session.get(User, user_id) is None:
             raise HTTPException(status_code=404, detail="User not found")
-    return SignOutResponse(revoked=await revoke_sign_ins(SignIn.user_id == user_id))
+    return SignOutResponse(
+        revoked=await revoke_sign_ins(SignIn.user_id == user_id, actor_user_id=principal.user_id)
+    )

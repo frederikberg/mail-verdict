@@ -1979,6 +1979,32 @@ class AlertRepository:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def create_user_alert(
+        self, *, user_id: uuid.UUID, kind: str, dedupe_key: str, title: str, body: str,
+    ) -> Alert | None:
+        """
+        Insert a delivered alert addressed to one user and about no account
+        -- an access key of theirs that was refused (alerts/access_key_refused.py).
+
+        dedupe_key names what it is about, so it fires once for it.
+
+        Returns:
+            The inserted Alert, or None if this was already alerted on
+        """
+        now = func.now()
+        async with self._db.session() as session:
+            stmt = (
+                pg_insert(Alert)
+                .values(
+                    kind=kind, deliver_at=now, delivered_at=now, title=title, body=body,
+                    dedupe_key=dedupe_key, user_id=user_id,
+                )
+                .on_conflict_do_nothing(constraint="uq_alerts_dedupe_key")
+                .returning(Alert)
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
     async def create_glacier_conflict_alert(
         self, *, account_id: uuid.UUID, message_id: uuid.UUID, title: str, body: str,
     ) -> Alert | None:

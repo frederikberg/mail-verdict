@@ -264,9 +264,14 @@ def refusal_for_tool(grant: Grant, tool: str) -> Refusal | None:
 
 
 async def report_refusal(principal: Principal, what: str, refusal: Refusal) -> None:
-    """Note that a scoped key asked for something its grant does not cover.
-    `what` names the route ("GET /api/mails") or tool ("tool send_mail")."""
+    """Record that a scoped key asked for something its grant does not cover:
+    a log line, the audit trail and the user's alert
+    (alerts/access_key_refused.py). `what` names the route ("GET /api/mails")
+    or tool ("tool send_mail")."""
+    from mail_verdict.alerts.access_key_refused import record_refusal
+
     logger.warning(
         "Scoped key %s refused %s (needs %s)", principal.subject, what,
         refusal.scope or "full access",
     )
+    await record_refusal(principal, what, refusal)
