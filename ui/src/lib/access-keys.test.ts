@@ -37,24 +37,34 @@ test("a write limit with nothing chosen is refused, an unlimited one is not", ()
   assert.equal(grantProblem({ ...draft, calendarLimit: ["c1"] }), null);
 });
 
-test("the body names a limit only for a write the picker could show", () => {
-  const draft = {
-    ...emptyDraft(true),
-    calendar: "write" as const,
-    contacts: "read" as const,
-    calendarLimit: ["c1"],
-    addressbookLimit: ["b1"],
-  };
-  assert.deepEqual(grantBody(draft), {
+test("every write scope names where it applies, null meaning everywhere", () => {
+  const base = { ...emptyDraft(true), calendar: "write" as const, contacts: "write" as const };
+  assert.deepEqual(grantBody({ ...base, calendarLimit: ["c1"], addressbookLimit: null }), {
     access: "scoped",
-    scopes: ["calendar:write", "contacts:read"],
+    scopes: ["calendar:write", "contacts:write"],
     calendar_write_ids: ["c1"],
+    addressbook_write_ids: null,
   });
-  // Someone else's key: the limit is neither shown nor overwritten.
-  const foreign = grantBody({ ...draft, limitsEditable: false });
-  assert.equal("calendar_write_ids" in foreign, false);
-  // Full access carries no scopes and no limits.
-  assert.deepEqual(grantBody({ ...draft, full: true }), { access: "full" });
+  // A read scope names no limit; full access carries neither scopes nor limits.
+  const read = grantBody({ ...base, calendar: "read", calendarLimit: ["c1"] });
+  assert.equal("calendar_write_ids" in read, false);
+  assert.deepEqual(grantBody({ ...base, full: true }), { access: "full" });
+});
+
+test("a key of someone else keeps its limit but cannot be given a new write scope", () => {
+  const foreign = emptyDraft(false);
+  // New write scope: the picker cannot name where, so the form refuses.
+  assert.notEqual(grantProblem({ ...foreign, calendar: "write" }), null);
+  assert.notEqual(grantProblem({ ...foreign, contacts: "write" }), null);
+  // Already held: kept as it was, the stored limit sent back.
+  const held = {
+    ...foreign,
+    calendar: "write" as const,
+    calendarLimit: ["c1"],
+    held: { calendar: "write" as const, contacts: "none" as const },
+  };
+  assert.equal(grantProblem(held), null);
+  assert.deepEqual(grantBody(held).calendar_write_ids, ["c1"]);
 });
 
 test("a write limit says where, an unlimited write says everywhere", () => {

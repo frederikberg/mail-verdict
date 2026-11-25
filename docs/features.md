@@ -301,11 +301,13 @@ mail client: a `mailto:` link opens the composer filled in from the link.
   undo send, how orders are summarised and closed), Unified views, Notifications, Calendar,
   Accounts, Signed-in devices and Keyboard shortcuts. On a phone the list of categories is a
   screen of its own.
-- Signed-in devices lists every phone (by the name it gives itself) and access key that has used
-  the account, and the person's web browsers as one entry, with when each was last used. Signing
-  one out takes effect on its next request and ends its notifications at once: a phone stays out
-  until it signs in again, an access key for good, and the browsers until their person signs in
-  again at the identity provider.
+- Signed-in devices lists every phone (by the name it gives itself) and the person's web browsers
+  as one entry, with when each was last used. Below it, Access keys lists the keys that act as the
+  person, each with what it may do in words (for example "Calendars: can read and change, only in
+  Work"), a red badge when it has full access, when it was last used and when it was last turned
+  away. The person can sign a key out but not change it. Signing out takes effect on its next
+  request and ends notifications at once: a phone stays out until it signs in again, an access key
+  for good, and the browsers until their person signs in again at the identity provider.
 - Folders are chosen with one picker, for a unified view and for the folders that raise a
   notification: a filter, a switch hiding system folders (Drafts, Sent, Trash, Junk and folders
   the sidebar hides), and a collapsible group per account whose checkbox ticks everything it lists.
@@ -315,8 +317,12 @@ mail client: a `mailto:` link opens the composer filled in from the link.
   everywhere, sign out one of their phones, browsers or access keys, reassign a mail or calendar
   account to another user, remove a user completely with their accounts, orders, rules and
   settings -- no screen for anyone's mail; an account nobody owns raises an alert for the admins),
-  Access keys (every machine client that
-  has signed in, whoever it belongs to, each of which can be signed out), Models (one row per
+  Access keys (every key, whoever it belongs to, with what it may do: attach a machine user as a
+  limited key, or as a full one, which is a separate choice marked in red and never what an empty
+  form means; change what it may do, rename it, or revoke it, which also signs it out. Where a key
+  may change calendars or contacts can be limited to chosen ones, and a key may be given a new
+  write permission only with that limit named, so for another person's key, whose calendars the
+  list cannot show, only a write permission it already has is kept), Models (one row per
   AI task with provider, model, reasoning effort and token budget), Providers & keys, Processing
   (queues as compact tiles with their controls in a menu, failed runs, and each user's rule set as
   counts only), Secrets and System (usage export, semantic index coverage, queue tuning). Anyone else who opens

@@ -224,11 +224,10 @@ function GrantEditor({
                   }
                 />
               )}
-              {draft[resource] === "write" && !draft.limitsEditable && (
+              {draft[resource] === "write" && !draft.limitsEditable && draft.held[resource] === "write" && (
                 <p className="ml-26 text-xs text-muted-foreground">
-                  {resource === "calendar"
-                    ? "Which calendars it may change can only be set for your own keys: the list comes from your account."
-                    : "Which address books it may change can only be set for your own keys: the list comes from your account."}
+                  Where it may change things stays as it is. Changing that needs the list from this
+                  person&apos;s own account, so it is only offered for your own keys.
                 </p>
               )}
             </div>

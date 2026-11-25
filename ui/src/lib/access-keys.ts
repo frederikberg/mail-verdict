@@ -92,6 +92,10 @@ export interface GrantDraft {
   /** Whether the picker could list the collections: only the signed-in
    * person's own, so a key of someone else keeps whatever limit it has. */
   limitsEditable: boolean;
+  /** What the key holds already (none for a new key). Giving a key a write
+   * scope it did not hold means naming its limit, which a picker that
+   * cannot list the collections cannot do. */
+  held: Record<Resource, Level>;
 }
 
 export type GrantBody = Pick<
@@ -99,51 +103,59 @@ export type GrantBody = Pick<
   "access" | "scopes" | "calendar_write_ids" | "addressbook_write_ids"
 >;
 
+const WRITE_NOUN: Record<Resource, string> = { calendar: "calendar", contacts: "address book" };
+
 /** Why a draft cannot be saved yet, said in the form's words, or null. */
 export function grantProblem(draft: GrantDraft): string | null {
   if (draft.full) return null;
   if (draft.calendar === "none" && draft.contacts === "none") {
     return "Choose what the key may do, or give it full access.";
   }
-  if (draft.limitsEditable) {
-    if (draft.calendar === "write" && draft.calendarLimit?.length === 0) {
-      return "Choose at least one calendar, or let it change events in every calendar.";
+  for (const resource of ["calendar", "contacts"] as const) {
+    if (draft[resource] !== "write") continue;
+    if (!draft.limitsEditable) {
+      if (draft.held[resource] !== "write") {
+        return `Choosing which ${WRITE_NOUN[resource]}s it may change needs a list of ${WRITE_NOUN[resource]}s that only that person's own account can show. Attach it as one of your own keys, or leave ${resource === "calendar" ? "calendars" : "contacts"} at Read.`;
+      }
+      continue;
     }
-    if (draft.contacts === "write" && draft.addressbookLimit?.length === 0) {
-      return "Choose at least one address book, or let it change contacts in every address book.";
+    const limit = resource === "calendar" ? draft.calendarLimit : draft.addressbookLimit;
+    if (limit?.length === 0) {
+      return `Choose at least one ${WRITE_NOUN[resource]}, or let it change ${
+        resource === "calendar" ? "events" : "contacts"
+      } in every ${WRITE_NOUN[resource]}.`;
     }
   }
   return null;
 }
 
-/** The request body a draft stands for. A write limit is named only when
- * the picker could show the collections and the key writes there; leaving
- * it out lets the server clear a limit whose write scope is gone, and keep
- * one this form could not display. */
+/** The request body a draft stands for. Every write scope carries its
+ * limit field (null: every collection), because the server refuses a write
+ * scope that leaves out where it applies. A key of someone else keeps the
+ * limit it has, sent back as it was. */
 export function grantBody(draft: GrantDraft): GrantBody {
   if (draft.full) return { access: "full" };
   const body: GrantBody = {
     access: "scoped",
     scopes: scopesFor({ calendar: draft.calendar, contacts: draft.contacts }),
   };
-  if (draft.limitsEditable && draft.calendar === "write") {
-    body.calendar_write_ids = draft.calendarLimit;
-  }
-  if (draft.limitsEditable && draft.contacts === "write") {
-    body.addressbook_write_ids = draft.addressbookLimit;
-  }
+  if (draft.calendar === "write") body.calendar_write_ids = draft.calendarLimit;
+  if (draft.contacts === "write") body.addressbook_write_ids = draft.addressbookLimit;
   return body;
 }
 
 /** The draft an existing key starts from. */
 export function draftOf(key: AccessKey, limitsEditable: boolean): GrantDraft {
+  const calendar = levelOf(key.scopes, "calendar");
+  const contacts = levelOf(key.scopes, "contacts");
   return {
     full: key.access === "full",
-    calendar: levelOf(key.scopes, "calendar"),
-    contacts: levelOf(key.scopes, "contacts"),
+    calendar,
+    contacts,
     calendarLimit: key.calendar_write_ids,
     addressbookLimit: key.addressbook_write_ids,
     limitsEditable,
+    held: { calendar, contacts },
   };
 }
 
@@ -157,6 +169,7 @@ export function emptyDraft(limitsEditable: boolean): GrantDraft {
     calendarLimit: null,
     addressbookLimit: null,
     limitsEditable,
+    held: { calendar: "none", contacts: "none" },
   };
 }
 
@@ -167,6 +180,10 @@ const ERROR_WORDS: Record<string, string> = {
   addressbook_limit_needs_contacts_write:
     "An address book limit only makes sense when the key may change contacts.",
   full_access_carries_no_scopes: "Full access cannot also carry a list of things it may do.",
+  calendar_limit_required:
+    "Say which calendars it may change: choose some, or every calendar.",
+  addressbook_limit_required:
+    "Say which address books it may change: choose some, or every address book.",
   unknown_scope: "That kind of access does not exist.",
   "this is the subject you are signed in with": "This is the key you are signed in with, so it cannot be changed here.",
 };

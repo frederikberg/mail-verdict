@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `GET /api/admin/access-keys`, `POST` and `PATCH /api/admin/users/{id}/subjects`; attaching, changing and
   removing a key is recorded in an audit trail, and `GET /api/me` and `GET /api/me/access-keys` show what a sign-in
   may do. Existing subjects keep full access.
+- Access keys in the web app: Administration > Access keys lists every key with what it may do in
+  plain words, marks full access in red, and lets an admin attach a machine user as a limited or
+  full key, change what it may do (calendars and contacts, each none, read, or read and change,
+  with changes optionally confined to chosen calendars or address books), rename it and revoke
+  it. Full access is chosen on purpose: a new key starts limited with nothing allowed. Signed-in
+  devices shows a person's own keys, read-only apart from signing one out. The lists update when a
+  key is attached, changed or removed elsewhere.
 - A refused access key request is written to the key's audit trail and raises an
   `access_key_refused` alert for the key's user, at most once per key and day; signing a key out is
   recorded too.
