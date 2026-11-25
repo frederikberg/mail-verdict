@@ -30,7 +30,12 @@ from sqlalchemy import Table, delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from mail_verdict.alerts.audience import reassign_account_alerts
-from mail_verdict.api.access_keys import check_grant, ensure_collections, grant_detail
+from mail_verdict.api.access_keys import (
+    announce_access_key_changed,
+    check_grant,
+    ensure_collections,
+    grant_detail,
+)
 from mail_verdict.api.accounts import remove_mail_account, require_account_delete_support
 from mail_verdict.api.dav_accounts import require_dav_support
 from mail_verdict.api.deps import require_admin, require_principal
@@ -351,6 +356,7 @@ async def add_subject(
     resolver = get_principal_resolver()
     if resolver is not None:
         resolver.forget()
+    await announce_access_key_changed(user_id, request.subject, "created")
     return (await _user_responses(user_id))[0]
 
 
@@ -380,6 +386,7 @@ async def remove_subject(
     resolver = get_principal_resolver()
     if resolver is not None:
         resolver.forget()
+    await announce_access_key_changed(user_id, subject, "removed")
     return (await _user_responses(user_id))[0]
 
 

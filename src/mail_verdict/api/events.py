@@ -59,6 +59,7 @@ logger = logging.getLogger(__name__)
 # it, so a new event is a registry entry -- and a diff of the exported contract
 # (docs/api-contract/sse-events.json) -- before it can reach a client.
 SSE_EVENT_TYPES: frozenset[str] = frozenset({
+    "access_key.changed",
     "account.changed",
     "alert.dismissed",
     "alert.new",

@@ -1345,6 +1345,8 @@ document: regenerate it and read the row as the decision about who may call it.
 `api/access_keys.py` and `api/admin.py` manage keys (`docs/api.md`). Attaching, changing and
 removing a key is written to `access_key_events`, which names its subject without a foreign key so
 a removed key's history stays.
+Each of those pushes `access_key.changed` (`{subject, user_id, op}`, `op` being `created`,
+`changed` or `removed`) to the key's user and to the admins, so an open list of keys refreshes.
 
 ### Who owns what
 
