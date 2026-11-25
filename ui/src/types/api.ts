@@ -383,6 +383,7 @@ export type SSEEventType =
   | "contact.collection"
   | "settings.changed"
   | "identity.changed"
+  | "access_key.changed"
   | "pipeline.document_changed"
   | "resync";
 
