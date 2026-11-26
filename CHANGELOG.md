@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.5.0] - 2026-11-26
+
 ### Added
 
 - Scoped access keys: a token subject can be attached to a user as a key limited to
