@@ -46,14 +46,14 @@ export function useSpamReviewList() {
 }
 
 /**
- * Decide on review items: agreeing confirms the spam verdict and files the
- * message in Junk, disagreeing corrects it and rescues the message from
- * Junk when it is there. One mail action per account, however many items.
+ * Rule on review items: spam files the message in Junk, not spam rescues
+ * it from Junk when it is there. One mail action per account, however many
+ * items.
  */
 export function useSpamReviewDecision() {
   const { performAll } = useMailAction();
   const decide = useCallback(
-    (items: SpamReviewItem[], agree: boolean) => {
+    (items: SpamReviewItem[], spam: boolean) => {
       const byAccount = new Map<string, SpamReviewItem[]>();
       for (const item of items) {
         byAccount.set(item.account_id, [...(byAccount.get(item.account_id) ?? []), item]);
@@ -62,7 +62,7 @@ export function useSpamReviewDecision() {
         [...byAccount.entries()].map(([accountId, group]) => ({
           accountId,
           mailIds: group.map((item) => item.message_id),
-          action: agree ? "spam" : "not_spam",
+          action: spam ? "spam" : "not_spam",
           bulk: true,
           seenFolderIds: Object.fromEntries(group.map((item) => [item.message_id, item.folder_id])),
         })),

@@ -68,8 +68,8 @@ class _Verdict:
 
 
 class TestApplyHumanRuling:
-    """The one function every surface calls: reading-pane thumbs, a row's
-    own Spam/Not-spam button, the review screen, and the MCP tool."""
+    """The one function every surface calls: the reading pane's and a row's
+    Spam / Not spam buttons, the review screen, and the MCP tool."""
 
     @pytest.mark.asyncio
     async def test_a_spam_ruling_always_moves_to_junk(self) -> None:
@@ -302,7 +302,7 @@ class TestApplyHumanRuling:
 
 class TestMarkReadOnFile:
     """settings.mail.mark_read_on_file_to_archive_or_junk, applied to a
-    spam ruling's own move -- the thumbs-down button and the review
+    spam ruling's own move -- the reader's Spam button and the review
     screen both go through apply_human_ruling, so this is the one place
     that covers them both."""
 

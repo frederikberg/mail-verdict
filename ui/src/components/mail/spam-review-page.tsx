@@ -2,9 +2,10 @@
 
 import { useCallback, useRef, useState } from "react";
 import { VList, type VListHandle } from "virtua";
-import { Ban, CheckCheck, Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { NotSpamIcon, SpamIcon } from "@/components/common/verdict-icons";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SpamReviewRow } from "@/components/mail/spam-review-row";
@@ -17,7 +18,7 @@ import type { SpamReviewItem } from "@/types/api";
  * the mail list and search page use for their own VList. */
 const LOAD_MORE_MARGIN = 200;
 
-type BulkKind = "accept" | "reject";
+type BulkKind = "spam" | "not_spam";
 
 /**
  * Everything the classifier currently calls spam with no ruling on it yet,
@@ -55,9 +56,9 @@ export function SpamReviewPage() {
   const runBulk = useCallback(
     (kind: BulkKind) => {
       const batch: SpamReviewItem[] = items;
-      decide(batch, kind === "accept");
+      decide(batch, kind === "spam");
       pushToast(
-        `${batch.length} message${batch.length === 1 ? "" : "s"} ${kind === "accept" ? "confirmed as spam" : "corrected"}`,
+        `${batch.length} message${batch.length === 1 ? "" : "s"} marked as ${kind === "spam" ? "spam" : "not spam"}`,
         "success",
       );
     },
@@ -70,7 +71,7 @@ export function SpamReviewPage() {
   );
 
   const decideOne = useCallback(
-    (item: SpamReviewItem, agree: boolean) => decide([item], agree),
+    (item: SpamReviewItem, spam: boolean) => decide([item], spam),
     [decide],
   );
 
@@ -84,19 +85,19 @@ export function SpamReviewPage() {
             variant="outline"
             size="sm"
             disabled={items.length === 0}
-            onClick={() => setPendingBulk("accept")}
+            onClick={() => setPendingBulk("not_spam")}
           >
-            <CheckCheck className="h-4 w-4" />
-            Accept all
+            <NotSpamIcon className="h-4 w-4" />
+            All good
           </Button>
           <Button
             variant="outline"
             size="sm"
             disabled={items.length === 0}
-            onClick={() => setPendingBulk("reject")}
+            onClick={() => setPendingBulk("spam")}
           >
-            <Ban className="h-4 w-4" />
-            Reject all
+            <SpamIcon className="h-4 w-4" />
+            All spam
           </Button>
         </div>
       </div>
@@ -144,16 +145,14 @@ export function SpamReviewPage() {
           if (!open) setPendingBulk(null);
         }}
         title={
-          pendingBulk === "accept"
-            ? `Confirm ${items.length} message${items.length === 1 ? "" : "s"} as spam?`
-            : `Correct ${items.length} message${items.length === 1 ? "" : "s"}?`
+          `Mark ${items.length} message${items.length === 1 ? "" : "s"} as ${pendingBulk === "spam" ? "spam" : "not spam"}?`
         }
         description={
-          pendingBulk === "accept"
-            ? "Records agreement with the classifier for every message currently listed. Nothing moves."
-            : "Records a correction for every message currently listed, and moves any of them still sitting in Junk back to the inbox."
+          pendingBulk === "spam"
+            ? "Rules every message currently listed spam and moves it to Junk."
+            : "Rules every message currently listed not spam, and moves any of them sitting in Junk back to the inbox."
         }
-        confirmLabel={pendingBulk === "accept" ? "Accept all" : "Reject all"}
+        confirmLabel={pendingBulk === "spam" ? "All spam" : "All good"}
         confirmVariant="default"
         onConfirm={() => {
           const kind = pendingBulk;

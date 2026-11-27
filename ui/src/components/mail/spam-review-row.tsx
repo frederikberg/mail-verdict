@@ -1,8 +1,8 @@
 "use client";
 
-import { ThumbsDown, ThumbsUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { NotSpamIcon, SpamIcon } from "@/components/common/verdict-icons";
 import {
   ENVELOPE_SENDER_HINT,
   distinctEnvelopeSender,
@@ -15,16 +15,14 @@ import type { SpamReviewItem } from "@/types/api";
 
 interface SpamReviewRowProps {
   item: SpamReviewItem;
-  onDecide: (item: SpamReviewItem, agree: boolean) => void;
+  onDecide: (item: SpamReviewItem, spam: boolean) => void;
   onOpen: (item: SpamReviewItem) => void;
   disabled: boolean;
 }
 
 /** One undecided spam verdict: the message, the reasoning that flagged
- * it, and the accept/reject controls -- accept records agreement with no
- * move, reject records the correction and (see use-spam-review.ts) moves
- * the message back to the inbox when the pipeline had already moved it
- * to Junk. */
+ * it, and the Not spam / Spam controls -- each rules the message and
+ * (see use-spam-review.ts) files it to match. */
 export function SpamReviewRow({ item, onDecide, onOpen, disabled }: SpamReviewRowProps) {
   const senderName = extractSenderName(item.from_addr);
   const senderEmail = extractEmail(item.from_addr);
@@ -107,21 +105,21 @@ export function SpamReviewRow({ item, onDecide, onOpen, disabled }: SpamReviewRo
           variant="outline"
           size="sm"
           disabled={disabled}
-          onClick={() => onDecide(item, true)}
-          title="Yes, this is spam"
-          aria-label="Yes, this is spam"
+          onClick={() => onDecide(item, false)}
+          title="Not spam"
+          aria-label="Not spam"
         >
-          <ThumbsUp className="h-4 w-4" />
+          <NotSpamIcon className="h-4 w-4" />
         </Button>
         <Button
           variant="outline"
           size="sm"
           disabled={disabled}
-          onClick={() => onDecide(item, false)}
-          title="Not spam"
-          aria-label="Not spam"
+          onClick={() => onDecide(item, true)}
+          title="Spam"
+          aria-label="Spam"
         >
-          <ThumbsDown className="h-4 w-4" />
+          <SpamIcon className="h-4 w-4" />
         </Button>
       </div>
     </div>

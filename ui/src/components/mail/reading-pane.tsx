@@ -10,8 +10,6 @@ import {
   Star,
   Archive,
   Ban,
-  ThumbsUp,
-  ThumbsDown,
   Undo2,
   MailOpen,
   Mail as MailIcon,
@@ -25,6 +23,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import { NotSpamIcon, SpamIcon } from "@/components/common/verdict-icons";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -487,15 +486,14 @@ export function ReadingPane() {
               </Button>
             }
           />
-          {/* Both controls appear on every message carrying a verdict,
-              whichever way it went -- up always confirms it, down always
-              corrects it. Which is which is decided here, once, rather
-              than by four differently-labelled buttons across the two
-              verdict states. */}
+          {/* A message the classifier ruled on shows Not spam and Spam in
+              place of the Junk control -- the same two actions, named for
+              what the message is rather than for whether the verdict was
+              right. One without a verdict keeps the Junk control alone. */}
           {/* Not yet supported against a glaciered message -- moving is
               recorded but performs no ruling from the stored copy, so
               nothing here would visibly do what it claims. */}
-          {primary.verdict && !isGlacier && (
+          {!isGlacier && (primary.verdict ? (
             <>
               <Button
                 variant="ghost"
@@ -504,13 +502,13 @@ export function ReadingPane() {
                 onClick={() =>
                   mailAction.perform({
                     accountId: primary.account_id, mailIds: [primary.id],
-                    action: primary.verdict!.is_spam ? "spam" : "not_spam",
+                    action: "not_spam",
                   })
                 }
-                title="Confirm this verdict"
-                aria-label="Confirm this verdict"
+                title="Not spam"
+                aria-label="Not spam"
               >
-                <ThumbsUp className="h-4 w-4" />
+                <NotSpamIcon className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
@@ -519,17 +517,16 @@ export function ReadingPane() {
                 onClick={() =>
                   mailAction.perform({
                     accountId: primary.account_id, mailIds: [primary.id],
-                    action: primary.verdict!.is_spam ? "not_spam" : "spam",
+                    action: "spam",
                   })
                 }
-                title="Correct this verdict"
-                aria-label="Correct this verdict"
+                title="Spam"
+                aria-label="Spam"
               >
-                <ThumbsDown className="h-4 w-4" />
+                <SpamIcon className="h-4 w-4" />
               </Button>
             </>
-          )}
-          {!isGlacier && (isInJunk ? (
+          ) : isInJunk ? (
             <Button
               variant="ghost"
               size="icon"
