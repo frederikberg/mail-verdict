@@ -13,6 +13,7 @@ import uuid
 from unittest.mock import AsyncMock
 
 import pytest
+import pytest_asyncio
 
 from mail_verdict.auth.principal import OWNER_USER_ID
 from mail_verdict.auth.scope import ADMIN_RING_KEY
@@ -293,14 +294,22 @@ def vapid_repo(migrated_db: DatabaseConnection) -> VapidKeyRepository:
 
 
 class TestDispatchPushForAlert:
+    @pytest_asyncio.fixture()
+    async def user_id(self, migrated_db: DatabaseConnection) -> uuid.UUID:
+        """A user of its own, so the alert's audience holds only this test's
+        devices: every subscription another test left on the shared database
+        would otherwise be sent to as well, and a send queued behind enough of
+        them waits out the pool's timeout."""
+        return await insert_user(migrated_db)
+
     @pytest.mark.asyncio
     async def test_sends_to_every_matching_subscription_and_marks_seen(
-        self, migrated_db: DatabaseConnection, vapid_repo: VapidKeyRepository,
+        self, migrated_db: DatabaseConnection, user_id: uuid.UUID, vapid_repo: VapidKeyRepository,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         repo = PushSubscriptionRepository(migrated_db)
         sub = await repo.upsert(
-            _OWNER, endpoint=f"https://push.example/{uuid.uuid4()}",
+            user_id, endpoint=f"https://push.example/{uuid.uuid4()}",
             p256dh="p", auth="a", label=None,
         )
 
@@ -314,29 +323,23 @@ class TestDispatchPushForAlert:
         )
 
         await dispatch_push_for_alert(
-            migrated_db, vapid_repo, _fake_alert(), _OWNER_DEVICES, folder_id=None, relay=None,
+            migrated_db, vapid_repo, _fake_alert(), str(user_id), folder_id=None, relay=None,
         )
 
-        # Not asserted as the only send: the migrated_db fixture is shared
-        # across this whole test file's session, and every "every folder"
-        # subscription an earlier test left behind matches folder_id=None
-        # too -- the same accumulation test_alerts_pg.py's own comments
-        # already document. This test's own endpoint being among the
-        # sends is what it actually proves.
-        assert sub.endpoint in sent
+        assert sent == [sub.endpoint]
         seen = await repo.get(sub.id)
         assert seen is not None and seen.last_seen_at is not None and seen.failed_at is None
 
     @pytest.mark.asyncio
     async def test_a_410_response_deletes_the_subscription(
-        self, migrated_db: DatabaseConnection, vapid_repo: VapidKeyRepository,
+        self, migrated_db: DatabaseConnection, user_id: uuid.UUID, vapid_repo: VapidKeyRepository,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from pywebpush import WebPushException
 
         repo = PushSubscriptionRepository(migrated_db)
         sub = await repo.upsert(
-            _OWNER, endpoint=f"https://push.example/{uuid.uuid4()}",
+            user_id, endpoint=f"https://push.example/{uuid.uuid4()}",
             p256dh="p", auth="a", label=None,
         )
 
@@ -351,21 +354,21 @@ class TestDispatchPushForAlert:
         )
 
         await dispatch_push_for_alert(
-            migrated_db, vapid_repo, _fake_alert(), _OWNER_DEVICES, folder_id=None, relay=None,
+            migrated_db, vapid_repo, _fake_alert(), str(user_id), folder_id=None, relay=None,
         )
 
         assert await repo.get(sub.id) is None
 
     @pytest.mark.asyncio
     async def test_an_other_failure_stamps_failed_at_and_keeps_the_row(
-        self, migrated_db: DatabaseConnection, vapid_repo: VapidKeyRepository,
+        self, migrated_db: DatabaseConnection, user_id: uuid.UUID, vapid_repo: VapidKeyRepository,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from pywebpush import WebPushException
 
         repo = PushSubscriptionRepository(migrated_db)
         sub = await repo.upsert(
-            _OWNER, endpoint=f"https://push.example/{uuid.uuid4()}",
+            user_id, endpoint=f"https://push.example/{uuid.uuid4()}",
             p256dh="p", auth="a", label=None,
         )
 
@@ -380,7 +383,7 @@ class TestDispatchPushForAlert:
         )
 
         await dispatch_push_for_alert(
-            migrated_db, vapid_repo, _fake_alert(), _OWNER_DEVICES, folder_id=None, relay=None,
+            migrated_db, vapid_repo, _fake_alert(), str(user_id), folder_id=None, relay=None,
         )
 
         row = await repo.get(sub.id)
@@ -389,11 +392,11 @@ class TestDispatchPushForAlert:
 
     @pytest.mark.asyncio
     async def test_no_encryption_key_is_a_silent_noop(
-        self, migrated_db: DatabaseConnection, monkeypatch: pytest.MonkeyPatch,
+        self, migrated_db: DatabaseConnection, user_id: uuid.UUID, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         repo = PushSubscriptionRepository(migrated_db)
         await repo.upsert(
-            _OWNER, endpoint=f"https://push.example/{uuid.uuid4()}",
+            user_id, endpoint=f"https://push.example/{uuid.uuid4()}",
             p256dh="p", auth="a", label=None,
         )
         never_called = AsyncMock()
@@ -401,7 +404,7 @@ class TestDispatchPushForAlert:
 
         no_key_repo = VapidKeyRepository(migrated_db, "")
         await dispatch_push_for_alert(
-            migrated_db, no_key_repo, _fake_alert(), _OWNER_DEVICES, folder_id=None,
+            migrated_db, no_key_repo, _fake_alert(), str(user_id), folder_id=None,
             relay=None,
         )
 
@@ -409,7 +412,7 @@ class TestDispatchPushForAlert:
 
     @pytest.mark.asyncio
     async def test_a_subscription_scoped_to_a_different_folder_is_skipped(
-        self, migrated_db: DatabaseConnection, vapid_repo: VapidKeyRepository,
+        self, migrated_db: DatabaseConnection, user_id: uuid.UUID, vapid_repo: VapidKeyRepository,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Not asserted by counting calls: the migrated_db fixture is
@@ -420,7 +423,7 @@ class TestDispatchPushForAlert:
         repo = PushSubscriptionRepository(migrated_db)
         other_folder = uuid.uuid4()
         sub = await repo.upsert(
-            _OWNER, endpoint=f"https://push.example/{uuid.uuid4()}",
+            user_id, endpoint=f"https://push.example/{uuid.uuid4()}",
             p256dh="p", auth="a", label=None,
         )
         await repo.update_prefs(sub.id, alert_folder_ids=[other_folder])
@@ -436,7 +439,7 @@ class TestDispatchPushForAlert:
 
         target_folder = uuid.uuid4()
         await dispatch_push_for_alert(
-            migrated_db, vapid_repo, _fake_alert(kind="mail"), _OWNER_DEVICES,
+            migrated_db, vapid_repo, _fake_alert(kind="mail"), str(user_id),
             folder_id=target_folder, relay=None,
         )
 
