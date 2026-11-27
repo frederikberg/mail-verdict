@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.6.0] - 2026-11-27
+
 ### Added
 
 - `auth.refused_client_ids`: tokens issued to the listed OIDC clients (`azp`, `client_id` or one
