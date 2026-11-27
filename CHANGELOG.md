@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A restart no longer produces a burst of database pool timeouts. Every periodic job starts at
+  once with the server, and each held a pooled connection for its advisory lock while its own
+  work needed another, so a handful of jobs left the pool with nothing for the rest of them, the
+  queue workers or the requests until the pool's timeout. The locks now live on connections
+  outside the pool.
+
 ## [9.7.0] - 2026-11-27
 
 ### Changed
