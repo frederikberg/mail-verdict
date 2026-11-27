@@ -95,10 +95,11 @@ auth:
   # native client's: listed, named by X-Device-Name and revoked one by one.
   # Comma-separated in MAIL_VERDICT_AUTH_APP_CLIENT_IDS.
   app_client_ids: []
-  # Client ids whose tokens are refused (401) whatever audience they name: an
-  # app that once forwarded its user's token here and no longer may. A token
-  # is refused when its `azp` or `client_id` is listed, before its subject is
-  # looked up, so every token that client ever issued stops at once.
+  # Client ids whose tokens are refused (401) whatever else they carry: an app
+  # that once forwarded its user's token here and no longer may. A token is
+  # refused when its `azp`, its `client_id` or one of its audiences is listed,
+  # before its subject is looked up, so every token that client ever issued
+  # stops at once.
   # Comma-separated in MAIL_VERDICT_AUTH_REFUSED_CLIENT_IDS.
   refused_client_ids: []
 
