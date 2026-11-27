@@ -61,17 +61,22 @@ async def test_a_token_from_the_issuer_for_one_of_the_audiences_passes(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("claim", ["azp", "client_id"])
-async def test_a_token_issued_to_a_refused_client_is_refused_whatever_its_audience(
+@pytest.mark.parametrize("claim", ["azp", "client_id", "aud"])
+async def test_a_token_issued_to_a_refused_client_is_refused_whatever_else_it_names(
     auth_issuer: TestIssuer, claim: str,
 ) -> None:
     verifier = _verifier(
         auth_issuer, refused_client_ids=["former-companion"], app_client_ids=["former-companion"],
     )
 
+    def token(client: str) -> str:
+        if claim == "aud":
+            return auth_issuer.mint("alice", extra={"aud": [AUDIENCE, client]})
+        return auth_issuer.mint("alice", extra={claim: client})
+
     with pytest.raises(InvalidToken):
-        await verifier.verify(auth_issuer.mint("alice", extra={claim: "former-companion"}))
-    claims = await verifier.verify(auth_issuer.mint("alice", extra={claim: "native-app"}))
+        await verifier.verify(token("former-companion"))
+    claims = await verifier.verify(token("native-app"))
     assert claims["sub"] == "alice"
 
 

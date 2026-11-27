@@ -7,8 +7,8 @@ itself. A token passes when it is signed by a key the issuer publishes (an
 asymmetric one -- a symmetric key in the set is ignored), names the configured
 issuer, has not expired, its audience shares at least one entry with
 auth.audiences, it was issued (iat) for no longer than
-auth.max_token_lifetime_seconds, and the client it was issued to (`azp` or
-`client_id`) is not one of auth.refused_client_ids.
+auth.max_token_lifetime_seconds, and no client in auth.refused_client_ids is
+the one it was issued to (`azp`, `client_id`) or among its audiences.
 
 The key set is fetched from auth.jwks_url and reused for
 auth.jwks_cache_seconds; a token naming a key id the set lacks triggers one
@@ -115,7 +115,11 @@ class TokenVerifier:
                 "auth.max_token_lifetime_seconds (%.0f s)", lifetime, self._max_lifetime,
             )
             raise InvalidToken()
-        clients = {claims.get("azp"), claims.get("client_id")}
+        audience = claims["aud"]
+        clients = {
+            claims.get("azp"), claims.get("client_id"),
+            *([audience] if isinstance(audience, str) else audience),
+        }
         if not self._refused_clients.isdisjoint(clients):
             logger.info("Rejected a token issued to a client listed in auth.refused_client_ids")
             raise InvalidToken()

@@ -1229,7 +1229,7 @@ circuit breaker and search's 503 behave as without one.
 Every request under `/api` and `/mcp` carries an OIDC JWT as `Authorization: Bearer ...`, and the
 application validates it itself (`auth/tokens.py`): signed by a key the issuer publishes, naming
 the configured issuer, unexpired, with an audience shared with `auth.audiences`, and issued (`iat`)
-for no longer than `auth.max_token_lifetime_seconds`, and not issued to a client in `auth.refused_client_ids` (`azp` or `client_id`, refused whatever its audience). The same validator serves every caller. A browser's token is the ID token an authenticating proxy in front
+for no longer than `auth.max_token_lifetime_seconds`, and not issued to a client in `auth.refused_client_ids` (its `azp`, `client_id` or one of its audiences). The same validator serves every caller. A browser's token is the ID token an authenticating proxy in front
 of the application forwards; a native app or an agent sends its own access token. Only
 `/api/health` (readiness has no token) and `/api/auth/config` (how a native app starts a sign-in)
 answer without one, plus the bare `/mcp` redirect. A missing or invalid token is 401 with

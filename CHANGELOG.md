@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- `auth.refused_client_ids`: tokens issued to the listed OIDC clients (`azp` or `client_id`) are
-  refused with `401` whatever audience they name, before their subject is looked up. It cuts off
+- `auth.refused_client_ids`: tokens issued to the listed OIDC clients (`azp`, `client_id` or one
+  of their audiences) are refused with `401`, before their subject is looked up. It cuts off
   an app that used to forward its users' tokens, every token it issued at once.
 
 ## [9.5.0] - 2026-11-26
