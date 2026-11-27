@@ -6,8 +6,9 @@ forwards for a browser, and the access token a native app or an agent sends
 itself. A token passes when it is signed by a key the issuer publishes (an
 asymmetric one -- a symmetric key in the set is ignored), names the configured
 issuer, has not expired, its audience shares at least one entry with
-auth.audiences, and it was issued (iat) for no longer than
-auth.max_token_lifetime_seconds.
+auth.audiences, it was issued (iat) for no longer than
+auth.max_token_lifetime_seconds, and the client it was issued to (`azp` or
+`client_id`) is not one of auth.refused_client_ids.
 
 The key set is fetched from auth.jwks_url and reused for
 auth.jwks_cache_seconds; a token naming a key id the set lacks triggers one
@@ -58,6 +59,7 @@ class TokenVerifier:
         self._audiences = list(config.audiences)
         self._leeway = config.leeway_seconds
         self._max_lifetime = config.max_token_lifetime_seconds
+        self._refused_clients = frozenset(config.refused_client_ids) - {""}
         self._jwks_cache_seconds = config.jwks_cache_seconds
         self._timeout = config.request_timeout_seconds
         self._token_cache_seconds = config.token_cache_seconds
@@ -112,6 +114,10 @@ class TokenVerifier:
                 "Rejected a token issued for %.0f s, longer than "
                 "auth.max_token_lifetime_seconds (%.0f s)", lifetime, self._max_lifetime,
             )
+            raise InvalidToken()
+        clients = {claims.get("azp"), claims.get("client_id")}
+        if not self._refused_clients.isdisjoint(clients):
+            logger.info("Rejected a token issued to a client listed in auth.refused_client_ids")
             raise InvalidToken()
 
         expires_at = min(float(claims["exp"]), now + self._token_cache_seconds)

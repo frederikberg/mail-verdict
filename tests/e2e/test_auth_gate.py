@@ -33,7 +33,13 @@ from mail_verdict.auth.middleware import PUBLIC_PATHS
 from mail_verdict.auth.principal import OWNER_USER_ID
 from mail_verdict.database.connection import get_db_connection
 from tests.e2e.isolation import UI_ROUTES, enumerate_routes
-from tests.setup.auth import NATIVE_CLIENT_ID, OWNER_SUBJECT, TestIssuer, bearer
+from tests.setup.auth import (
+    NATIVE_CLIENT_ID,
+    OWNER_SUBJECT,
+    REFUSED_CLIENT_ID,
+    TestIssuer,
+    bearer,
+)
 from tests.setup.containers import RADICALE_ALIAS, RADICALE_PORT
 
 _NO_TOKEN = {"Authorization": ""}
@@ -364,6 +370,18 @@ class TestUsers:
 
 
 class TestSignIns:
+    def test_a_token_issued_to_a_refused_client_is_refused_for_the_owner_too(
+        self, app_client: TestClient, auth_issuer: TestIssuer,
+    ) -> None:
+        refused = auth_issuer.mint(
+            OWNER_SUBJECT, extra={"azp": REFUSED_CLIENT_ID, "auth_time": int(time.time())},
+        )
+        own = auth_issuer.mint(OWNER_SUBJECT, extra={"auth_time": int(time.time())})
+
+        assert app_client.get("/api/me", headers=bearer(refused)).status_code == 401
+        assert app_client.post("/mcp/", headers=bearer(refused), json={}).status_code == 401
+        assert app_client.get("/api/me", headers=bearer(own)).status_code == 200
+
     def test_a_token_living_longer_than_the_ceiling_is_refused(
         self, app_client: TestClient, auth_issuer: TestIssuer,
     ) -> None:
