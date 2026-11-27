@@ -138,8 +138,8 @@ Two deliberate details:
 ## Acting on mail from the browser
 
 The browser never patches a cache to show what the reader just did. Every action -- archive,
-trash, move, spam (including the verdict thumbs and spam review), read state, star, and the same
-over an explicit selection -- becomes an *intent* (`ui/src/lib/mail-intents.ts`) in a ledger kept
+trash, move, spam (including the reader's Spam / Not spam buttons and spam review), read state,
+star, and the same over an explicit selection -- becomes an *intent* (`ui/src/lib/mail-intents.ts`) in a ledger kept
 in local storage (`ui/src/lib/intent-ledger.ts`), and everything on screen is the server's last
 answer with the intents projected over it: the list rows of any folder, unified view or filter,
 the open conversation, spam review, and every folder count. A new cache cannot be forgotten, and

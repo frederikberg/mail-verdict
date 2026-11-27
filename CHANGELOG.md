@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.7.0] - 2026-11-27
+
+### Changed
+
+- The verdict thumbs are replaced by Not spam (a face with a halo) and Spam (a face with horns):
+  the buttons say what the message is instead of asking whether the model was right, which the
+  thumbs meant differently in the reader and on the review screen. In the reader they take the
+  Junk button's place on a classified message. The review screen's Accept all / Reject all become
+  All good / All spam.
+
 ## [9.6.0] - 2026-11-27
 
 ### Added

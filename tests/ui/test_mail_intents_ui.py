@@ -389,9 +389,9 @@ class TestRulings:
         dovecot_endpoint: tuple[str, int, int],
         account: dict[str, Any],
     ) -> None:
-        """A not-spam verdict confirmed: the server records it and leaves the
-        message where it is, so the reader stays on it and there is nothing
-        to undo."""
+        """Not spam on a message already called not spam: the server records
+        the ruling and leaves the message where it is, so the reader stays on
+        it and there is nothing to undo."""
         target = _deliver(api_client, dovecot_endpoint, account, f"Clean {uuid.uuid4()}")
         resp = api_client.post(
             f"/api/messages/{target['id']}/action", json={"action": "not_spam"},
@@ -402,7 +402,7 @@ class TestRulings:
         expect(row).to_be_visible(timeout=15_000)
         row.click()
         toolbar = page.get_by_role("toolbar", name="Message actions")
-        confirm = toolbar.get_by_role("button", name="Confirm this verdict", exact=True)
+        confirm = toolbar.get_by_role("button", name="Not spam", exact=True)
         expect(confirm).to_be_visible(timeout=15_000)
 
         confirm.click()

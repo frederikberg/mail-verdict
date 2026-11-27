@@ -118,8 +118,11 @@ Everything MailVerdict does, area by area. The [README](../README.md) has the ov
 
 - Each new message is classified by a language model, with the reasoning visible and a correction
   loop when it gets one wrong.
+- A classified message shows two buttons in the reader, Not spam (a face with a halo) and Spam (a
+  face with horns), in place of the Junk button: the reader says what the message is, whichever
+  way the model ruled. A message without a verdict keeps the Junk button.
 - A review screen lists every message currently called spam with no ruling yet, across every
-  account and folder including Junk, for confirming or correcting them singly or in bulk.
+  account and folder including Junk, for ruling them Not spam or Spam singly or all at once.
 - Historical mail is never classified, and nothing is classified twice. Mail in Sent, Drafts,
   Trash, Junk, Archive and any folder switched off is never classified.
 

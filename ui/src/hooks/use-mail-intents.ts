@@ -3,8 +3,8 @@
  * reading pane on, offering undo, and telling the person what came of it.
  *
  * Every surface that acts on mail -- a row's controls, the reading pane's
- * toolbar and verdict thumbs, keyboard shortcuts, drag and drop, the bulk
- * panel, spam review -- goes through useMailAction, so the next message
+ * toolbar, keyboard shortcuts, drag and drop, the bulk panel, spam review --
+ * goes through useMailAction, so the next message
  * opened, the undo step and the toast are decided once. Folder-wide actions
  * over a predicate are the exception: nothing client-side knows which
  * messages they cover (use-selection.ts).
