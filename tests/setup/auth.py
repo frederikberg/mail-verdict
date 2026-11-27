@@ -40,6 +40,8 @@ OWNER_SUBJECT = "owner-subject"
 AUDIENCE = "mail-verdict-test"
 # The native app's client id: a token whose `azp` names it is a phone's.
 NATIVE_CLIENT_ID = "mail-verdict-test-native"
+# A client whose tokens the application is configured to refuse.
+REFUSED_CLIENT_ID = "mail-verdict-test-refused"
 
 
 class TestIssuer:
@@ -119,6 +121,7 @@ class TestIssuer:
             "MAIL_VERDICT_AUTH_AUDIENCES": AUDIENCE,
             "MAIL_VERDICT_AUTH_OWNER_SUBJECTS": ",".join(owner_subjects or [OWNER_SUBJECT]),
             "MAIL_VERDICT_AUTH_NATIVE_CLIENT_ID": NATIVE_CLIENT_ID,
+            "MAIL_VERDICT_AUTH_REFUSED_CLIENT_IDS": REFUSED_CLIENT_ID,
         }
 
     def close(self) -> None:

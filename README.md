@@ -195,6 +195,9 @@ and no passwords of its own. Set the `auth:` section of
 the owner's subjects. It refuses to start without them. A token issued for longer than
 `auth.max_token_lifetime_seconds` (a day by default) is refused however valid its signature, so
 long-lived tokens cannot outlast a revocation; phones renew their short access tokens on their own.
+A token issued to a client listed in `auth.refused_client_ids` is refused whatever audience it
+names: that is how an app that used to forward its users' tokens here is cut off, every token it
+ever issued at once.
 
 The identity provider decides who someone is; MailVerdict decides which of their sign-ins may
 still be used. It lists every signed-in phone, a person's browsers, and every machine client (an

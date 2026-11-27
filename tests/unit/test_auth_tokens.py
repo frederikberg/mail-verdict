@@ -40,6 +40,7 @@ def _verifier(issuer: TestIssuer, **overrides: object) -> TokenVerifier:
         "native_sign_in_handle": "zitadel_jti",
         "native_client_id": "",
         "app_client_ids": [],
+        "refused_client_ids": [],
         "native_scopes": "openid",
         "native_redirect_uri": "app://cb",
     }
@@ -57,6 +58,21 @@ async def test_a_token_from_the_issuer_for_one_of_the_audiences_passes(
 
     assert claims["sub"] == "alice"
     assert claims["email"] == "alice@example.com"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("claim", ["azp", "client_id"])
+async def test_a_token_issued_to_a_refused_client_is_refused_whatever_its_audience(
+    auth_issuer: TestIssuer, claim: str,
+) -> None:
+    verifier = _verifier(
+        auth_issuer, refused_client_ids=["former-companion"], app_client_ids=["former-companion"],
+    )
+
+    with pytest.raises(InvalidToken):
+        await verifier.verify(auth_issuer.mint("alice", extra={claim: "former-companion"}))
+    claims = await verifier.verify(auth_issuer.mint("alice", extra={claim: "native-app"}))
+    assert claims["sub"] == "alice"
 
 
 @pytest.mark.asyncio
