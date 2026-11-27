@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [9.7.1] - 2026-11-27
+
 ### Fixed
 
 - A restart no longer produces a burst of database pool timeouts. Every periodic job starts at
