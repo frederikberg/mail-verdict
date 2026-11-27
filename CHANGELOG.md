@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   of their audiences) are refused with `401`, before their subject is looked up. It cuts off
   an app that used to forward its users' tokens, every token it issued at once.
 
+### Fixed
+
+- Requests arriving while the issuer's key set is being fetched (the first concurrent requests after
+  a start, or after the issuer rotated its key) wait for that fetch instead of being refused with
+  `401`.
+
 ## [9.5.0] - 2026-11-26
 
 ### Added

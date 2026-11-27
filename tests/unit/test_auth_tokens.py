@@ -7,6 +7,7 @@ anything else (anything else would be a 500 instead of a 401).
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -78,6 +79,29 @@ async def test_a_token_issued_to_a_refused_client_is_refused_whatever_else_it_na
         await verifier.verify(token("former-companion"))
     claims = await verifier.verify(token("native-app"))
     assert claims["sub"] == "alice"
+
+
+@pytest.mark.asyncio
+async def test_requests_arriving_while_the_key_set_is_fetched_wait_for_it(
+    auth_issuer: TestIssuer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fresh process's first requests come in together; the ones that find the key set being
+    fetched must be answered from that fetch, not refused against the still-empty set."""
+    verifier = _verifier(auth_issuer)
+    fetch = verifier._fetch_keys
+
+    async def slow_fetch() -> None:
+        await asyncio.sleep(0.2)
+        await fetch()
+
+    monkeypatch.setattr(verifier, "_fetch_keys", slow_fetch)
+
+    claims = await asyncio.gather(
+        verifier.verify(auth_issuer.mint("alice")), verifier.verify(auth_issuer.mint("bob")),
+        verifier.verify(auth_issuer.mint("carol")),
+    )
+
+    assert [c["sub"] for c in claims] == ["alice", "bob", "carol"]
 
 
 @pytest.mark.asyncio
