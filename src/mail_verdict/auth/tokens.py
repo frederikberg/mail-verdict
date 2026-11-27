@@ -145,6 +145,12 @@ class TokenVerifier:
                 if self._last_attempt < now:
                     self._last_attempt = time.monotonic()
                     await self._fetch_keys()
+        elif wanted and self._lock.locked():
+            # Another request is fetching the set this one needs: wait for that fetch instead
+            # of answering from a set that is still empty (every concurrent first request of a
+            # fresh process) or that lacks the new key.
+            async with self._lock:
+                pass
         if kid is None:
             return next(iter(self._keys.values())) if len(self._keys) == 1 else None
         return self._keys.get(str(kid))
