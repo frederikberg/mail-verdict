@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from sqlalchemy import text
 
+from mail_verdict.config.loader import DatabaseConfig
 from mail_verdict.database.connection import DatabaseConnection
 from mail_verdict.postimap.listener import parse_dsn_from_sqlalchemy_url
 from mail_verdict.queue.notify import ReconciliationTimer, WorkQueueNotifier, wait_for_work
@@ -142,3 +144,39 @@ class TestReconciliationTimer:
 
         assert results == [True, True]
         assert calls == 2
+
+    @pytest.mark.asyncio
+    async def test_timers_firing_together_never_starve_each_others_callbacks(
+        self, postgres_url: str, migrated_db: DatabaseConnection,
+    ) -> None:
+        """Every timer starts at once when the server does. On a pool smaller
+        than the number of timers, each timer holding a pooled connection for
+        its lock would leave its callback waiting for a connection the other
+        timers hold -- until the pool's own timeout."""
+        small = DatabaseConnection(
+            DatabaseConfig(url=postgres_url, pool_size=2, max_overflow=0, reserved_for_requests=0)
+        )
+        await small.init()
+        completed = 0
+
+        async def callback() -> None:
+            nonlocal completed
+            async with small.session() as session:
+                await session.execute(text("SELECT 1"))
+            completed += 1
+
+        timers = [
+            ReconciliationTimer(
+                small, lock_key=424250 + n, callback=callback, interval_seconds=60,
+            )
+            for n in range(6)
+        ]
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*(timer.run_once() for timer in timers)), timeout=10.0,
+            )
+        finally:
+            await small.close()
+
+        assert results == [True] * 6
+        assert completed == 6

@@ -163,7 +163,7 @@ class ReconciliationTimer:
             True if this call held the lock and ran the callback; False if
             another replica held it instead
         """
-        async with self._db.engine.connect() as conn:
+        async with self._db.lock_connection() as conn:
             lock_result = await conn.execute(
                 text("SELECT pg_try_advisory_lock(:key)"), {"key": self._lock_key},
             )

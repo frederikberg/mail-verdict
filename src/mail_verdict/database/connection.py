@@ -10,8 +10,9 @@ import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, AsyncIterator
 
-from sqlalchemy import text
+from sqlalchemy import NullPool, text
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
@@ -40,6 +41,7 @@ class DatabaseConnection:
         """
         self._config = config
         self._engine: AsyncEngine | None = None
+        self._lock_engine: AsyncEngine | None = None
         self._session_factory: async_sessionmaker[AsyncSession] | None = None
 
     @property
@@ -75,6 +77,13 @@ class DatabaseConnection:
             max_overflow=self._config.max_overflow,
             pool_pre_ping=True,
         )
+        # Session-level advisory locks (queue/notify.py) are held for as long
+        # as their connection is open. Taking them from the pool above would
+        # let the many timers that fire together at startup hold every
+        # pooled connection, leaving their own callbacks and the requests
+        # with none. These connections stay out of the pool and last as long
+        # as the lock does.
+        self._lock_engine = create_async_engine(self._config.url, echo=False, poolclass=NullPool)
         self._session_factory = async_sessionmaker(
             self._engine,
             class_=AsyncSession,
@@ -86,11 +95,26 @@ class DatabaseConnection:
 
     async def close(self) -> None:
         """Close the database connection and dispose of the pool."""
+        if self._lock_engine:
+            await self._lock_engine.dispose()
+            self._lock_engine = None
         if self._engine:
             await self._engine.dispose()
             self._engine = None
             self._session_factory = None
             logger.info("Database connection closed")
+
+    @asynccontextmanager
+    async def lock_connection(self) -> AsyncIterator[AsyncConnection]:
+        """
+        A connection outside the pool, for holding a session-level advisory
+        lock across a long piece of work. Closed on exit, which also
+        releases any lock still held on it.
+        """
+        if self._lock_engine is None:
+            raise RuntimeError("Database not initialized. Call init() first.")
+        async with self._lock_engine.connect() as conn:
+            yield conn
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
